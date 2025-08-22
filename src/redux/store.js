@@ -1,16 +1,6 @@
 import { configureStore } from "@reduxjs/toolkit";
-import customerSlice from "./slices/customerSlice"
-import cartSlice from "./slices/cartSlice";
-import userSlice from "./slices/userSlice";
+import user from "./slices/userSlice";
+import customer from "./slices/customerSlice";
+import cart from "./slices/cartSlice";
 
-const store = configureStore({
-    reducer: {
-        customer: customerSlice,
-        cart : cartSlice,
-        user : userSlice
-    },
-
-    devTools: import.meta.env.NODE_ENV !== "production",
-});
-
-export default store;
+export default configureStore({ reducer: { user, customer, cart } });

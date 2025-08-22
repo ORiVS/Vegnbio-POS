@@ -5,7 +5,6 @@ import { removeUser, setUser } from "../redux/slices/userSlice";
 import { useNavigate } from "react-router-dom";
 import { mapDjangoUser } from "../utils/mapUser";
 
-
 const useLoadData = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
@@ -13,16 +12,13 @@ const useLoadData = () => {
 
   useEffect(() => {
     let alive = true;
-
-    const fetchUser = async () => {
+    const run = async () => {
+      const token = localStorage.getItem("access");
+      if (!token) { setIsLoading(false); return; }
       try {
         const { data } = await getUserData();
-        console.log(data); // <-- ici tu voyais déjà: { email, first_name, last_name, role, profile }
         if (!alive) return;
-
-        // ✅ on lit directement data (pas data.data)
-        const user = mapDjangoUser(data);
-        dispatch(setUser(user));
+        dispatch(setUser(mapDjangoUser(data)));
       } catch (error) {
         if (!alive) return;
         dispatch(removeUser());
@@ -32,11 +28,8 @@ const useLoadData = () => {
         if (alive) setIsLoading(false);
       }
     };
-
-    fetchUser();
-    return () => {
-      alive = false;
-    };
+    run();
+    return () => { alive = false; };
   }, [dispatch, navigate]);
 
   return isLoading;

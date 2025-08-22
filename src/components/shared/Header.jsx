@@ -1,86 +1,58 @@
-import React from "react";
-import { FaSearch } from "react-icons/fa";
-import { FaUserCircle } from "react-icons/fa";
-import { FaBell } from "react-icons/fa";
-import logo from "../../assets/images/logo.png";
-import { useDispatch, useSelector } from "react-redux";
-import { IoLogOut } from "react-icons/io5";
-import { useMutation } from "@tanstack/react-query";
+// src/components/shared/Header.jsx
+import { useSelector, useDispatch } from "react-redux";
+import { Link, useNavigate } from "react-router-dom";
 import { logout } from "../../https";
 import { removeUser } from "../../redux/slices/userSlice";
-import { useNavigate } from "react-router-dom";
-import { MdDashboard } from "react-icons/md";
+import { useState, useEffect } from "react";
 
-const Header = () => {
-  const userData = useSelector((state) => state.user);
-  const dispatch = useDispatch();
-  const navigate = useNavigate();
+export default function Header() {
+    const user = useSelector((s) => s.user);
+    const nav = useNavigate();
+    const dispatch = useDispatch();
 
-  const logoutMutation = useMutation({
-    mutationFn: () => logout(),
-    onSuccess: (data) => {
-      console.log(data);
-      dispatch(removeUser());
-      navigate("/auth");
-    },
-    onError: (error) => {
-      console.log(error);
-    },
-  });
+    const [time, setTime] = useState(new Date());
 
-  const handleLogout = () => {
-    logoutMutation.mutate();
-  };
+    useEffect(() => {
+        const timer = setInterval(() => setTime(new Date()), 1000);
+        return () => clearInterval(timer);
+    }, []);
 
-  return (
-    <header className="flex justify-between items-center py-4 px-8 bg-[#1a1a1a]">
-      {/* LOGO */}
-      <div onClick={() => navigate("/")} className="flex items-center gap-2 cursor-pointer">
-        <img src={logo} className="h-8 w-8" alt="restro logo" />
-        <h1 className="text-lg font-semibold text-[#f5f5f5] tracking-wide">
-          Restro
-        </h1>
-      </div>
+    const onLogout = async () => {
+        await logout();
+        dispatch(removeUser());
+        nav("/auth");
+    };
 
-      {/* SEARCH */}
-      <div className="flex items-center gap-4 bg-[#1f1f1f] rounded-[15px] px-5 py-2 w-[500px]">
-        <FaSearch className="text-[#f5f5f5]" />
-        <input
-          type="text"
-          placeholder="Search"
-          className="bg-[#1f1f1f] outline-none text-[#f5f5f5]"
-        />
-      </div>
+    const formattedTime = time.toLocaleTimeString("fr-FR", {
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+    });
 
-      {/* LOGGED USER DETAILS */}
-      <div className="flex items-center gap-4">
-        {userData.role === "Admin" && (
-          <div onClick={() => navigate("/dashboard")} className="bg-[#1f1f1f] rounded-[15px] p-3 cursor-pointer">
-            <MdDashboard className="text-[#f5f5f5] text-2xl" />
-          </div>
-        )}
-        <div className="bg-[#1f1f1f] rounded-[15px] p-3 cursor-pointer">
-          <FaBell className="text-[#f5f5f5] text-2xl" />
-        </div>
-        <div className="flex items-center gap-3 cursor-pointer">
-          <FaUserCircle className="text-[#f5f5f5] text-4xl" />
-          <div className="flex flex-col items-start">
-            <h1 className="text-md text-[#f5f5f5] font-semibold tracking-wide">
-              {userData.name || "TEST USER"}
-            </h1>
-            <p className="text-xs text-[#ababab] font-medium">
-              {userData.role || "Role"}
-            </p>
-          </div>
-          <IoLogOut
-            onClick={handleLogout}
-            className="text-[#f5f5f5] ml-2"
-            size={40}
-          />
-        </div>
-      </div>
-    </header>
-  );
-};
-
-export default Header;
+    return (
+        <header className="h-20 flex items-center justify-between px-8 border-b border-[#2a2a2a] bg-[#1a1a1a]">
+            <div
+                className="font-semibold tracking-wide cursor-pointer"
+                onClick={() => nav("/")}
+            >
+                Veg'N Bio POS
+            </div>
+            <nav className="flex gap-6 text-sm">
+                <Link to="/">Accueil</Link>
+                <Link to="/orders">Commandes</Link>
+                <Link to="/menu">Menu</Link>
+                <Link to="/dashboard">Dashboard</Link>
+            </nav>
+            <div className="flex items-center gap-6">
+                <span className="text-xl font-bold text-emerald-400">{formattedTime}</span>
+                <span className="text-sm opacity-80">{user?.name || user?.email}</span>
+                <button
+                    className="px-3 py-1 rounded bg-red-600/80 hover:bg-red-600 text-sm"
+                    onClick={onLogout}
+                >
+                    Déconnexion
+                </button>
+            </div>
+        </header>
+    );
+}

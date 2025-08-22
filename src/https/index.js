@@ -1,12 +1,11 @@
-// src/https/index.js
 import axios from "axios";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000/api";
 
-// --- client public: AUCUN header Authorization
+// public: pas de token
 export const publicApi = axios.create({ baseURL: API_BASE });
 
-// --- client privé: ajoute Authorization si token présent
+// privé: ajoute Authorization
 export const api = axios.create({ baseURL: API_BASE });
 api.interceptors.request.use((cfg) => {
     const token = localStorage.getItem("access");
@@ -14,71 +13,73 @@ api.interceptors.request.use((cfg) => {
     return cfg;
 });
 
-/* ===================== AUTH ===================== */
-// Login & register DOIVENT passer par publicApi (pas de token)
+/* ============ AUTH ============ */
 export const login = (data) => publicApi.post("/accounts/login/", data);
 export const register = (data) => publicApi.post("/accounts/register/", data);
-
-// Routes privées → api (avec token)
 export const getUserData = () => api.get("/accounts/me/");
-export const logout = async () => {
-    try { await api.post("/accounts/logout/"); } catch {}
-    localStorage.removeItem("access");
-    return Promise.resolve();
-};
+export const logout = async () => { try { await api.post("/accounts/logout/"); } catch {} localStorage.removeItem("access"); };
 
-/* ===================== TABLES ===================== */
+/* ============ TABLES (à activer si API dispo) ============ */
 export const addTable = (data) => api.post("/pos/tables/", data);
 export const getTables = (params) => api.get("/pos/tables/", { params });
-export const updateTable = ({ tableId, ...tableData }) =>
-    api.put(`/pos/tables/${tableId}/`, tableData);
+export const updateTable = ({ tableId, ...tableData }) => api.put(`/pos/tables/${tableId}/`, tableData);
 
-/* ===================== PAYMENTS (Razorpay off) ===================== */
-export const createOrderRazorpay = () => { throw new Error("Razorpay off"); };
-export const verifyPaymentRazorpay = () => { throw new Error("Razorpay off"); };
-
-/* ===================== ORDERS (POS) ===================== */
+/* ============ ORDERS (POS) ============ */
 export const addOrder = (data) => api.post("/pos/orders/", data);
 
 export const getOrders = async (params) => {
     const res = await api.get("/pos/orders/", { params });
-    const data = res?.data;
-    if (Array.isArray(data)) return data;
-    if (Array.isArray(data?.results)) return data.results;
-    if (Array.isArray(data?.data)) return data.data;
+    const d = res?.data;
+    if (Array.isArray(d)) return d;
+    if (Array.isArray(d?.results)) return d.results;
+    if (Array.isArray(d?.data)) return d.data;
     return [];
 };
 
-export const updateOrderStatus = async ({ orderId, orderStatus }) => {
-    const status = String(orderStatus).toUpperCase();
-    const action =
-        status === "HOLD" ? "hold" :
-            status === "REOPEN" ? "reopen" :
-                status === "CANCELLED" ? "cancel" :
-                    status === "PAID" ? "checkout" : null;
-
-    if (action === "checkout") {
-        return api.post(`/pos/orders/${orderId}/checkout/`, { method: "CASH", amount: null });
-    }
-    if (action) return api.post(`/pos/orders/${orderId}/${action}/`, {});
-    return api.put(`/pos/orders/${orderId}/`, { status });
-};
-
-export const addItem = (orderId, payload) => api.post(`/pos/orders/${orderId}/add_item/`, payload);
-export const updateItem = (orderId, itemId, quantity) =>
-    api.post(`/pos/orders/${orderId}/update_item/`, { item_id: itemId, quantity });
-export const removeItem = (orderId, itemId) =>
-    api.post(`/pos/orders/${orderId}/remove_item/`, { item_id: itemId });
-
 export const hold = (orderId) => api.post(`/pos/orders/${orderId}/hold/`, {});
 export const reopen = (orderId) => api.post(`/pos/orders/${orderId}/reopen/`, {});
-export const checkout = (orderId, method, amount) =>
-    api.post(`/pos/orders/${orderId}/checkout/`, { method, amount });
+export const cancelOrder = (orderId) => api.post(`/pos/orders/${orderId}/cancel/`, {});
 
-export const ticket = (orderId) =>
-    api.get(`/pos/orders/${orderId}/ticket/`, { responseType: "blob" });
+// encaissement: { method: "CASH|CARD|ONLINE", amount: number|null }
+// src/https/index.js
+export const checkout = (orderId, method, amount, note = "") =>
+    api.post(`/pos/orders/${orderId}/checkout/`, { method, amount, note });
 
+
+export const ticket = (orderId) => api.get(`/pos/orders/${orderId}/ticket/`);
 export const summary = (params) => api.get("/pos/orders/summary/", { params });
 
-// alias pratique si ton Login.jsx importe getMe
-export const getMe = getUserData;
+// lignes
+export const addItem = (orderId, payload) =>
+    api.post(`/pos/orders/${orderId}/add_item/`, payload);
+
+export const updateItem = (orderId, itemId, partialData) =>
+    api.patch(`/pos/orders/${orderId}/items/${itemId}/update/`, partialData);
+
+export const removeItem = (orderId, itemId) =>
+    api.delete(`/pos/orders/${orderId}/items/${itemId}/remove/`);
+
+/* ============ DISHES / MENUS (adapter si besoin) ============ */
+export const getDishes = async (params) => {
+    try { return (await api.get("/menu/dishes/", { params })).data; }
+    catch { try { return (await api.get("/menu/menus/", { params })).data; }
+    catch { return []; } }
+};
+
+export const getMenus = async (params) => {
+    const res = await publicApi.get("/menus/", { params });
+    // Ton ViewSet renvoie une liste simple de menus
+    return Array.isArray(res?.data) ? res.data : (res?.data?.results || []);
+};
+
+/* ===================== DISH AVAILABILITY (optionnel) ===================== */
+// Si tu veux filtrer les plats dispo par restaurant+date, sinon ignore.
+export const getDishAvailability = async (params) => {
+    const res = await publicApi.get("/dish-availability/", { params });
+    return Array.isArray(res?.data) ? res.data : (res?.data?.results || []);
+};
+
+/* ===================== DISCOUNT ===================== */
+export const applyDiscount = (orderId, payload) =>
+    api.post(`/pos/orders/${orderId}/apply_discount/`, payload);
+
