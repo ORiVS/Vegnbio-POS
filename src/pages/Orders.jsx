@@ -1,23 +1,22 @@
-// src/pages/Orders.jsx
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useSelector } from "react-redux";
 import { getOrders, hold, reopen, cancelOrder, ticket } from "../https";
 import CheckoutDialog from "../components/checkout/CheckoutDialog";
 
-const isPaid      = (o) => o.status === "PAID";
-const isCancelled = (o) => o.status === "CANCELLED";
-const isRefunded  = (o) => o.status === "REFUNDED";
-const isOpen      = (o) => o.status === "OPEN";
-const isHold      = (o) => o.status === "HOLD";
+const isPaid      = (o) => String(o.status).toUpperCase() === "PAID";
+const isCancelled = (o) => String(o.status).toUpperCase() === "CANCELLED";
+const isRefunded  = (o) => String(o.status).toUpperCase() === "REFUNDED";
+const isOpen      = (o) => String(o.status).toUpperCase() === "OPEN";
+const isHold      = (o) => String(o.status).toUpperCase() === "HOLD";
 
 const canHold     = (o) => isOpen(o);
 const canReopen   = (o) => isHold(o);
 const canCancel   = (o) => isOpen(o) || isHold(o);
 const canCheckout = (o) => isOpen(o) && Number(o.total_due ?? 0) > Number(o.paid_amount ?? 0);
-
 const isReadOnly  = (o) => isPaid(o) || isCancelled(o) || isRefunded(o);
 
-// ordre logique pour les statuts
+// ordre logique
 const STATUS_ORDER = ["OPEN", "HOLD", "PAID", "CANCELLED", "REFUNDED"];
 const statusRank = (s) => {
     const up = String(s || "").toUpperCase();
@@ -27,21 +26,35 @@ const statusRank = (s) => {
 
 export default function Orders() {
     const navigate = useNavigate();
+    const RESTAURANT_ID = useSelector(s => s.user.activeRestaurantId);
+
     const [orders, setOrders] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
     const [checkoutOrder, setCheckoutOrder] = useState(null);
 
-    // État du tri
-    const [sortBy, setSortBy]   = useState("id");     // "id" | "status" | "total_due" | "paid_amount"
-    const [sortDir, setSortDir] = useState("desc");   // "asc" | "desc"
+    // Filtre “Aujourd’hui / Toutes”
+    const [todayOnly, setTodayOnly] = useState(true);
+
+    // Tri
+    const [sortBy, setSortBy]   = useState("id");
+    const [sortDir, setSortDir] = useState("desc");
 
     const reload = async () => {
         setLoading(true);
+        setError("");
+
         try {
-            const today = new Date().toISOString().slice(0, 10);
-            const data = await getOrders({ restaurant: 1, date: today });
-            setOrders(data || []);
+            // Si aucun resto sélectionné: on vide
+            if (!RESTAURANT_ID) {
+                setOrders([]);
+                return;
+            }
+            const params = { restaurant: RESTAURANT_ID };
+            if (todayOnly) params.date = new Date().toISOString().slice(0, 10);
+
+            const data = await getOrders(params);
+            setOrders(Array.isArray(data) ? data : []);
         } catch (e) {
             setError("Impossible de récupérer les commandes");
         } finally {
@@ -51,23 +64,19 @@ export default function Orders() {
 
     useEffect(() => {
         document.title = "Veg'N Bio | Commandes";
-        reload();
     }, []);
 
-    const doAndReload = async (p) => {
-        await p;
-        await reload();
-    };
+    // charge au montage & quand RESTAURANT_ID change
+    useEffect(() => { reload(); /* eslint-disable-next-line */ }, [RESTAURANT_ID]);
 
-    // Gestion du tri
+    // recharge quand on change Aujourd’hui/Toutes
+    useEffect(() => { reload(); /* eslint-disable-next-line */ }, [todayOnly]);
+
+    const doAndReload = async (p) => { await p; await reload(); };
+
     const toggleSort = (col) => {
-        if (col === sortBy) {
-            setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-        } else {
-            setSortBy(col);
-            // par défaut : id desc, le reste asc
-            setSortDir(col === "id" ? "desc" : "asc");
-        }
+        if (col === sortBy) setSortDir(d => (d === "asc" ? "desc" : "asc"));
+        else { setSortBy(col); setSortDir(col === "id" ? "desc" : "asc"); }
     };
 
     const sortedOrders = useMemo(() => {
@@ -75,62 +84,60 @@ export default function Orders() {
         const dir = sortDir === "asc" ? 1 : -1;
 
         arr.sort((a, b) => {
-            if (sortBy === "id") {
-                const av = Number(a.id ?? 0);
-                const bv = Number(b.id ?? 0);
-                return (av - bv) * dir;
-            }
+            if (sortBy === "id") return (Number(a.id ?? 0) - Number(b.id ?? 0)) * dir;
             if (sortBy === "status") {
-                const ar = statusRank(a.status);
-                const br = statusRank(b.status);
+                const ar = statusRank(a.status), br = statusRank(b.status);
                 if (ar !== br) return (ar - br) * dir;
-                // secours : alpha
                 return String(a.status || "").localeCompare(String(b.status || "")) * dir;
             }
-            if (sortBy === "total_due") {
-                const av = Number(a.total_due ?? 0);
-                const bv = Number(b.total_due ?? 0);
-                return (av - bv) * dir;
-            }
-            if (sortBy === "paid_amount") {
-                const av = Number(a.paid_amount ?? 0);
-                const bv = Number(b.paid_amount ?? 0);
-                return (av - bv) * dir;
-            }
+            if (sortBy === "total_due")
+                return (Number(a.total_due ?? 0) - Number(b.total_due ?? 0)) * dir;
+            if (sortBy === "paid_amount")
+                return (Number(a.paid_amount ?? 0) - Number(b.paid_amount ?? 0)) * dir;
             return 0;
         });
-
         return arr;
     }, [orders, sortBy, sortDir]);
 
-    // Petite flèche ↑↓ + état actif
     const Arrow = ({ active, dir }) => (
         <span className={`ml-1 inline-block text-xs transition-opacity ${active ? "opacity-100" : "opacity-40"}`}>
       {active ? (dir === "asc" ? "↑" : "↓") : "↕"}
     </span>
     );
 
-    // Bouton d'en-tête triable
     const SortHeader = ({ col, children }) => {
         const active = sortBy === col;
         return (
-            <button
-                type="button"
-                onClick={() => toggleSort(col)}
-                className="inline-flex items-center gap-1 hover:underline"
-                title="Trier"
-            >
+            <button type="button" onClick={() => toggleSort(col)} className="inline-flex items-center gap-1 hover:underline" title="Trier">
                 <span>{children}</span>
                 <Arrow active={active} dir={active ? sortDir : undefined} />
             </button>
         );
     };
 
+    const FilterSegment = () => (
+        <div className="inline-flex rounded-lg overflow-hidden border border-[#2a2a2a]">
+            <button
+                className={`px-3 py-1.5 text-sm ${todayOnly ? "bg-emerald-600/20 text-emerald-300" : "bg-[#1a1a1a] hover:bg-[#151515] opacity-90"}`}
+                onClick={() => setTodayOnly(true)}
+            >Aujourd’hui</button>
+            <button
+                className={`px-3 py-1.5 text-sm ${!todayOnly ? "bg-emerald-600/20 text-emerald-300" : "bg-[#1a1a1a] hover:bg-[#151515] opacity-90"}`}
+                onClick={() => setTodayOnly(false)}
+            >Toutes</button>
+        </div>
+    );
+
     return (
         <section className="p-8">
             <div className="flex items-center justify-between mb-4">
                 <h1 className="text-xl font-semibold">Commandes</h1>
+                <FilterSegment />
             </div>
+
+            {!RESTAURANT_ID && (
+                <div className="mb-4 text-amber-300">Sélectionnez un restaurant dans l’entête pour afficher les commandes.</div>
+            )}
 
             {loading ? (
                 <div>Chargement…</div>
@@ -141,18 +148,10 @@ export default function Orders() {
                     <table className="w-full text-sm">
                         <thead className="bg-[#151515]">
                         <tr>
-                            <th className="text-left p-3">
-                                <SortHeader col="id">#</SortHeader>
-                            </th>
-                            <th className="text-left p-3">
-                                <SortHeader col="status">Statut</SortHeader>
-                            </th>
-                            <th className="text-left p-3">
-                                <SortHeader col="total_due">Total dû</SortHeader>
-                            </th>
-                            <th className="text-left p-3">
-                                <SortHeader col="paid_amount">Payé</SortHeader>
-                            </th>
+                            <th className="text-left p-3"><SortHeader col="id">#</SortHeader></th>
+                            <th className="text-left p-3"><SortHeader col="status">Statut</SortHeader></th>
+                            <th className="text-left p-3"><SortHeader col="total_due">Total dû</SortHeader></th>
+                            <th className="text-left p-3"><SortHeader col="paid_amount">Payé</SortHeader></th>
                             <th className="text-left p-3">Actions</th>
                         </tr>
                         </thead>
@@ -163,9 +162,7 @@ export default function Orders() {
                             const _canReopen = !disabledAll && canReopen(o);
                             const _canCancel = !disabledAll && canCancel(o);
                             const _canCheckout = !disabledAll && canCheckout(o);
-
-                            const btnBase =
-                                "px-2 py-1 rounded disabled:opacity-40 disabled:cursor-not-allowed";
+                            const btnBase = "px-2 py-1 rounded disabled:opacity-40 disabled:cursor-not-allowed";
 
                             return (
                                 <tr
@@ -183,54 +180,16 @@ export default function Orders() {
                                     <td className="p-3">{Number(o.paid_amount ?? 0).toFixed(2)} €</td>
                                     <td className="p-3">
                                         <div className="flex flex-wrap gap-2">
-                                            <button
-                                                className={`${btnBase} bg-amber-600/80 hover:bg-amber-600`}
-                                                disabled={!_canHold}
-                                                aria-disabled={!_canHold}
-                                                title={!_canHold ? "Action indisponible" : "Mettre en attente"}
-                                                onClick={(e) => { e.stopPropagation(); doAndReload(hold(o.id)); }}
-                                            >
-                                                Hold
-                                            </button>
-
-                                            <button
-                                                className={`${btnBase} bg-sky-600/80 hover:bg-sky-600`}
-                                                disabled={!_canReopen}
-                                                aria-disabled={!_canReopen}
-                                                title={!_canReopen ? "Action indisponible" : "Rouvrir"}
-                                                onClick={(e) => { e.stopPropagation(); doAndReload(reopen(o.id)); }}
-                                            >
-                                                Reopen
-                                            </button>
-
-                                            <button
-                                                className={`${btnBase} bg-rose-600/80 hover:bg-rose-600`}
-                                                disabled={!_canCancel}
-                                                aria-disabled={!_canCancel}
-                                                title={!_canCancel ? "Action indisponible" : "Annuler"}
-                                                onClick={(e) => { e.stopPropagation(); doAndReload(cancelOrder(o.id)); }}
-                                            >
-                                                Annuler
-                                            </button>
-
-                                            <button
-                                                className={`${btnBase} bg-emerald-600/80 hover:bg-emerald-600`}
-                                                disabled={!_canCheckout}
-                                                aria-disabled={!_canCheckout}
-                                                title={!_canCheckout ? "Rien à encaisser" : "Encaisser"}
-                                                onClick={(e) => { e.stopPropagation(); setCheckoutOrder(o); }}
-                                            >
-                                                Encaisser
-                                            </button>
-
-                                            <button
-                                                className={`${btnBase} bg-zinc-700 hover:bg-zinc-600`}
-                                                onClick={async (e) => {
-                                                    e.stopPropagation();
-                                                    const { data } = await ticket(o.id);
-                                                    alert(JSON.stringify(data, null, 2));
-                                                }}
-                                            >
+                                            <button className={`${btnBase} bg-amber-600/80 hover:bg-amber-600`} disabled={!_canHold}
+                                                    onClick={(e) => { e.stopPropagation(); doAndReload(hold(o.id)); }}>Hold</button>
+                                            <button className={`${btnBase} bg-sky-600/80 hover:bg-sky-600`} disabled={!_canReopen}
+                                                    onClick={(e) => { e.stopPropagation(); doAndReload(reopen(o.id)); }}>Reopen</button>
+                                            <button className={`${btnBase} bg-rose-600/80 hover:bg-rose-600`} disabled={!_canCancel}
+                                                    onClick={(e) => { e.stopPropagation(); doAndReload(cancelOrder(o.id)); }}>Annuler</button>
+                                            <button className={`${btnBase} bg-emerald-600/80 hover:bg-emerald-600`} disabled={!_canCheckout}
+                                                    onClick={(e) => { e.stopPropagation(); setCheckoutOrder(o); }}>Encaisser</button>
+                                            <button className={`${btnBase} bg-zinc-700 hover:bg-zinc-600`}
+                                                    onClick={async (e) => { e.stopPropagation(); const { data } = await ticket(o.id); alert(JSON.stringify(data, null, 2)); }}>
                                                 Ticket
                                             </button>
                                         </div>
@@ -242,7 +201,7 @@ export default function Orders() {
                         {sortedOrders.length === 0 && (
                             <tr>
                                 <td colSpan={5} className="p-6 text-center opacity-70">
-                                    Aucune commande aujourd’hui.
+                                    {todayOnly ? "Aucune commande aujourd’hui." : "Aucune commande."}
                                 </td>
                             </tr>
                         )}
@@ -255,10 +214,7 @@ export default function Orders() {
                 open={!!checkoutOrder}
                 order={checkoutOrder}
                 onClose={() => setCheckoutOrder(null)}
-                onSuccess={async () => {
-                    setCheckoutOrder(null);
-                    await reload();
-                }}
+                onSuccess={async () => { setCheckoutOrder(null); await reload(); }}
             />
         </section>
     );

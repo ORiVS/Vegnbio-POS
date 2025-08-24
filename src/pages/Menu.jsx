@@ -1,5 +1,6 @@
 // src/pages/Menu.jsx
 import { useEffect, useMemo, useState } from "react";
+import { useSelector } from "react-redux";
 import {
   addOrder,
   addItem,
@@ -13,7 +14,6 @@ import {
 import CheckoutDialog from "../components/checkout/CheckoutDialog";
 
 const TODAY = new Date().toISOString().slice(0, 10);
-const RESTAURANT_ID = 1;
 
 // Regroupe les items d'un menu par course_type
 const groupByCourse = (items = []) =>
@@ -25,6 +25,10 @@ const groupByCourse = (items = []) =>
     }, {});
 
 export default function Menu() {
+  // ⚠️ On lit l’ID du resto dans Redux (ex: s.user.restaurantId)
+  const restaurantIdFromUser = useSelector((s) => s.user?.restaurantId);
+  const RESTAURANT_ID = restaurantIdFromUser || 1; // fallback sécurisé
+
   const [currentOrder, setCurrentOrder] = useState(null);
   const [dishes, setDishes] = useState([]);
   const [menus, setMenus] = useState([]);
@@ -42,22 +46,26 @@ export default function Menu() {
 
   useEffect(() => {
     document.title = "Veg'N Bio | Menu";
+  }, []);
+
+  useEffect(() => {
+    // recharge quand le resto change (changement d’utilisateur)
     (async () => {
       try {
         setLoading(true);
-        // 1) plats actifs (tu peux filtrer vegan/allergènes avec params si besoin)
+        // 1) plats actifs
         const dishList = await getDishes({ is_active: "true" });
         setDishes(dishList);
 
         // 2) menus du jour pour ce restaurant
         const menuList = await getMenus({ restaurant: RESTAURANT_ID, date: TODAY });
-        // si tu veux ne montrer que ceux publiés : filter client-side
-        setMenus(menuList.filter((m) => m.is_published !== false));
+        // Si besoin d’afficher uniquement les menus publiés
+        setMenus((menuList || []).filter((m) => m.is_published !== false));
       } finally {
         setLoading(false);
       }
     })();
-  }, []);
+  }, [RESTAURANT_ID]);
 
   // Synchronise la colonne "Commande" depuis le ticket (vérité serveur)
   const syncFromTicket = async (orderId) => {
@@ -114,7 +122,7 @@ export default function Menu() {
 
   const addFromMenuItem = async (menuItem) => {
     const d = dishById.get(menuItem.dish);
-    if (!d) return; // sécurité: menu référence un dish non chargé
+    if (!d) return;
     await add(d);
   };
 
@@ -163,7 +171,9 @@ export default function Menu() {
               {loading ? (
                   <div className="opacity-80 text-sm">Chargement des menus…</div>
               ) : menus.length === 0 ? (
-                  <div className="opacity-60 text-sm">Aucun menu publié pour aujourd’hui.</div>
+                  <div className="opacity-60 text-sm">
+                    Aucun menu publié pour aujourd’hui.
+                  </div>
               ) : (
                   menus.map((m) => {
                     const groups = groupByCourse(m.items || []);
@@ -176,10 +186,12 @@ export default function Menu() {
                             </div>
                           </div>
 
-                          {/* chaque cours : Entrée / Plat / Dessert / Boisson */}
                           <div className="grid md:grid-cols-2 gap-4">
                             {Object.entries(groups).map(([course, items]) => (
-                                <div key={course} className="border border-[#2a2a2a] rounded-lg">
+                                <div
+                                    key={course}
+                                    className="border border-[#2a2a2a] rounded-lg"
+                                >
                                   <div className="px-3 py-2 bg-[#111] text-xs uppercase tracking-wide opacity-80">
                                     {labelCourse(course)}
                                   </div>
@@ -187,8 +199,13 @@ export default function Menu() {
                                     {items.map((it) => {
                                       const dish = dishById.get(it.dish);
                                       const title = dish?.name || "(Plat indisponible)";
-                                      const price = dish?.price != null ? Number(dish.price).toFixed(2) + " €" : "—";
-                                      const allergens = (dish?.allergens || []).map((a) => a.label).join(", ");
+                                      const price =
+                                          dish?.price != null
+                                              ? Number(dish.price).toFixed(2) + " €"
+                                              : "—";
+                                      const allergens = (dish?.allergens || [])
+                                          .map((a) => a.label)
+                                          .join(", ");
 
                                       return (
                                           <button
@@ -196,14 +213,22 @@ export default function Menu() {
                                               onClick={() => dish && addFromMenuItem(it)}
                                               className="w-full text-left p-3 rounded bg-[#1a1a1a] hover:bg-[#151515] border border-[#2a2a2a]"
                                               disabled={!dish}
-                                              title={!dish ? "Plat non disponible" : "Ajouter à la commande"}
+                                              title={
+                                                !dish
+                                                    ? "Plat non disponible"
+                                                    : "Ajouter à la commande"
+                                              }
                                           >
                                             <div className="flex items-center justify-between">
                                               <div className="font-medium">{title}</div>
-                                              <div className="text-sm opacity-80">{price}</div>
+                                              <div className="text-sm opacity-80">
+                                                {price}
+                                              </div>
                                             </div>
                                             {allergens && (
-                                                <div className="text-xs opacity-70 mt-1">{allergens}</div>
+                                                <div className="text-xs opacity-70 mt-1">
+                                                  {allergens}
+                                                </div>
                                             )}
                                           </button>
                                       );
@@ -247,7 +272,9 @@ export default function Menu() {
                           {(d.allergens || []).map((a) => a.label).join(", ")}
                         </div>
                         {d.description && (
-                            <div className="text-xs opacity-60 mt-2 line-clamp-2">{d.description}</div>
+                            <div className="text-xs opacity-60 mt-2 line-clamp-2">
+                              {d.description}
+                            </div>
                         )}
                       </button>
                   ))}
@@ -259,7 +286,7 @@ export default function Menu() {
           </section>
         </div>
 
-        {/* Colonne droite : commande en cours */}
+        {/* Colonne droite : commande */}
         <aside className="col-span-12 lg:col-span-4 space-y-3">
           <div className="p-4 rounded-lg border border-[#2a2a2a] bg-[#1a1a1a]">
             <div className="font-semibold mb-2">Commande</div>
@@ -357,10 +384,15 @@ export default function Menu() {
 
 function labelCourse(key) {
   switch (String(key).toUpperCase()) {
-    case "ENTREE": return "Entrées";
-    case "PLAT": return "Plats";
-    case "DESSERT": return "Desserts";
-    case "BOISSON": return "Boissons";
-    default: return key;
+    case "ENTREE":
+      return "Entrées";
+    case "PLAT":
+      return "Plats";
+    case "DESSERT":
+      return "Desserts";
+    case "BOISSON":
+      return "Boissons";
+    default:
+      return key;
   }
 }

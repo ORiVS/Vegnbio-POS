@@ -1,38 +1,34 @@
+// src/hooks/useLoadData.js (exemple d’implémentation)
+import { useEffect, useState } from "react";
 import { useDispatch } from "react-redux";
 import { getUserData } from "../https";
-import { useEffect, useState } from "react";
-import { removeUser, setUser } from "../redux/slices/userSlice";
-import { useNavigate } from "react-router-dom";
-import { mapDjangoUser } from "../utils/mapUser";
+import { setUser } from "../redux/slices/userSlice";
 
-const useLoadData = () => {
+export default function useLoadData() {
+  const [loading, setLoading] = useState(true);
   const dispatch = useDispatch();
-  const navigate = useNavigate();
-  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    let alive = true;
-    const run = async () => {
-      const token = localStorage.getItem("access");
-      if (!token) { setIsLoading(false); return; }
+    (async () => {
       try {
-        const { data } = await getUserData();
-        if (!alive) return;
-        dispatch(setUser(mapDjangoUser(data)));
-      } catch (error) {
-        if (!alive) return;
-        dispatch(removeUser());
-        navigate("/auth");
-        console.error(error);
+        const r = await getUserData(); // GET /accounts/me/
+        const u = r?.data || {};
+        dispatch(
+            setUser({
+              email: u.email,
+              name: `${u.first_name || ""} ${u.last_name || ""}`.trim() || u.email,
+              role: u.role,
+              restaurants: Array.isArray(u.restaurants) ? u.restaurants : [],
+              activeRestaurantId: u.active_restaurant_id ?? null,
+            })
+        );
+      } catch {
+        // pas authentifié → on laisse isAuth=false
       } finally {
-        if (alive) setIsLoading(false);
+        setLoading(false);
       }
-    };
-    run();
-    return () => { alive = false; };
-  }, [dispatch, navigate]);
+    })();
+  }, [dispatch]);
 
-  return isLoading;
-};
-
-export default useLoadData;
+  return loading;
+}

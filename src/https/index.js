@@ -19,7 +19,7 @@ export const register = (data) => publicApi.post("/accounts/register/", data);
 export const getUserData = () => api.get("/accounts/me/");
 export const logout = async () => { try { await api.post("/accounts/logout/"); } catch {} localStorage.removeItem("access"); };
 
-/* ============ TABLES (à activer si API dispo) ============ */
+/* ============ TABLES (optionnel) ============ */
 export const addTable = (data) => api.post("/pos/tables/", data);
 export const getTables = (params) => api.get("/pos/tables/", { params });
 export const updateTable = ({ tableId, ...tableData }) => api.put(`/pos/tables/${tableId}/`, tableData);
@@ -36,50 +36,42 @@ export const getOrders = async (params) => {
     return [];
 };
 
-export const hold = (orderId) => api.post(`/pos/orders/${orderId}/hold/`, {});
+export const hold = (orderId)   => api.post(`/pos/orders/${orderId}/hold/`, {});
 export const reopen = (orderId) => api.post(`/pos/orders/${orderId}/reopen/`, {});
 export const cancelOrder = (orderId) => api.post(`/pos/orders/${orderId}/cancel/`, {});
 
 // encaissement: { method: "CASH|CARD|ONLINE", amount: number|null }
-// src/https/index.js
 export const checkout = (orderId, method, amount, note = "") =>
     api.post(`/pos/orders/${orderId}/checkout/`, { method, amount, note });
 
-
-export const ticket = (orderId) => api.get(`/pos/orders/${orderId}/ticket/`);
-export const summary = (params) => api.get("/pos/orders/summary/", { params });
+export const ticket  = (orderId) => api.get(`/pos/orders/${orderId}/ticket/`);
+export const summary = (params)  => api.get("/pos/orders/summary/", { params });
 
 // lignes
 export const addItem = (orderId, payload) =>
     api.post(`/pos/orders/${orderId}/add_item/`, payload);
-
 export const updateItem = (orderId, itemId, partialData) =>
     api.patch(`/pos/orders/${orderId}/items/${itemId}/update/`, partialData);
-
 export const removeItem = (orderId, itemId) =>
     api.delete(`/pos/orders/${orderId}/items/${itemId}/remove/`);
 
-/* ============ DISHES / MENUS (adapter si besoin) ============ */
+/* ============ DISHES / MENUS ============ */
 export const getDishes = async (params) => {
-    try { return (await api.get("/menu/dishes/", { params })).data; }
-    catch { try { return (await api.get("/menu/menus/", { params })).data; }
-    catch { return []; } }
+    try { return (await publicApi.get("/menu/dishes/", { params })).data; }
+    catch { return []; }
 };
 
 export const getMenus = async (params) => {
-    const res = await publicApi.get("/menus/", { params });
-    // Ton ViewSet renvoie une liste simple de menus
+    const res = await publicApi.get("/menu/menus/", { params });
     return Array.isArray(res?.data) ? res.data : (res?.data?.results || []);
 };
 
-/* ===================== DISH AVAILABILITY (optionnel) ===================== */
-// Si tu veux filtrer les plats dispo par restaurant+date, sinon ignore.
+/* ============ DISPO PLATS (optionnel) ============ */
 export const getDishAvailability = async (params) => {
-    const res = await publicApi.get("/dish-availability/", { params });
+    const res = await publicApi.get("/menu/dish-availability/", { params });
     return Array.isArray(res?.data) ? res.data : (res?.data?.results || []);
 };
 
-/* ===================== DISCOUNT ===================== */
+/* ============ DISCOUNT ============ */
 export const applyDiscount = (orderId, payload) =>
     api.post(`/pos/orders/${orderId}/apply_discount/`, payload);
-

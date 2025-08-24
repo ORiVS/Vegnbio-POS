@@ -1,13 +1,12 @@
-// src/pages/Dashboard.jsx
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useSelector } from "react-redux";
 import { getOrders, ticket, summary } from "../https";
 import { fmt, toNum } from "../utils/money";
 
-const RESTAURANT_ID = 1;
 const todayISO = () => new Date().toISOString().slice(0, 10);
 
-// -- util
+// util
 function enumerateDates(startISO, endISO) {
   const out = [];
   const start = new Date(startISO + "T00:00:00");
@@ -18,13 +17,13 @@ function enumerateDates(startISO, endISO) {
   return out;
 }
 
-// -- agrégations (fallback multi-jours)
+// agrégations locale
 function aggregateFromOrdersBase(orders, base) {
   const safe = Array.isArray(orders) ? orders : [];
   const kpis = {
     ordersCount: safe.length,
-    revenue: 0,     // "paid" => paid_amount ; "due" => total_due
-    totalDueSum: 0, // pour le ticket moyen
+    revenue: 0,
+    totalDueSum: 0,
     avgTicket: 0,
     statusCounts: { OPEN:0, HOLD:0, PAID:0, CANCELLED:0, REFUNDED:0, OTHER:0 },
   };
@@ -44,7 +43,7 @@ function aggregateFromOrdersBase(orders, base) {
 function seriesFromOrdersBase(orders, startISO, endISO, base) {
   const sameDay = startISO === endISO;
   const safe = Array.isArray(orders) ? orders : [];
-  const map = new Map(); // heure/jour -> somme
+  const map = new Map();
 
   safe.forEach((o) => {
     const dt = o.opened_at || o.created_at || o.date || null;
@@ -69,10 +68,10 @@ function seriesFromOrdersBase(orders, startISO, endISO, base) {
   return out;
 }
 
-// -- Top plats
+// Top plats
 async function computeTopDishes(orders, maxOrdersForTop = 60) {
   const list = Array.isArray(orders) ? orders.slice(0, maxOrdersForTop) : [];
-  const counter = new Map(); // label -> { qty, revenue }
+  const counter = new Map();
 
   const results = await Promise.allSettled(list.map((o) => ticket(o.id)));
   for (const r of results) {
@@ -94,7 +93,7 @@ async function computeTopDishes(orders, maxOrdersForTop = 60) {
   return arr.slice(0, 10);
 }
 
-// -- Barre (fallback “chart”)
+// Barre simple
 function BarRow({ label, value, max }) {
   const ratio = max > 0 ? Math.min(100, Math.round((value / max) * 100)) : 0;
   return (
@@ -112,15 +111,12 @@ function BarRow({ label, value, max }) {
 
 export default function Dashboard() {
   const navigate = useNavigate();
+  const RESTAURANT_ID = useSelector(s => s.user.activeRestaurantId);
 
-  // filtres
   const [start, setStart] = useState(todayISO());
   const [end, setEnd]     = useState(todayISO());
-
-  // base d’analyse comme Home : on reste sur l'encaissé par défaut
   const [base, setBase]   = useState("paid"); // "paid" | "due"
 
-  // états
   const [loading, setLoading]   = useState(true);
   const [err, setErr]           = useState("");
   const [orders, setOrders]     = useState([]);
@@ -128,29 +124,30 @@ export default function Dashboard() {
   const [series, setSeries]     = useState([]);
   const [topDishes, setTopDishes] = useState([]);
 
-  // LIVE
   const liveOrders = useMemo(
       () => orders.filter(o => ["OPEN","HOLD"].includes(String(o.status||"").toUpperCase())),
       [orders]
   );
 
-  // ---- CHANGEMENT PRINCIPAL : si période = aujourd’hui, on fait comme Home ----
   const load = async () => {
     setLoading(true);
     setErr("");
     try {
+      if (!RESTAURANT_ID) {
+        setOrders([]); setKpis(null); setSeries([]); setTopDishes([]);
+        return;
+      }
       const sameDay = start === end;
 
       if (sameDay) {
-        // 1) comme Home : summary(date) + getOrders(date)
         const date = start;
-        // summary → on normalise (Home utilise r.data.count / r.data.turnover)
+        // summary
         let k = { ordersCount: 0, revenue: 0, totalDueSum: 0, avgTicket: 0, statusCounts: {} };
         try {
           const r = await summary({ restaurant: RESTAURANT_ID, date });
           const s = r?.data || {};
           const count = Number(s.count ?? s.orders_count ?? 0);
-          const turnover = Number(s.turnover ?? s.total_due ?? s.revenue ?? 0); // TTC facturé ou encaissé suivant back
+          const turnover = Number(s.turnover ?? s.total_due ?? s.revenue ?? 0);
           k.ordersCount = count;
           k.revenue     = base === "paid" ? Number(s.total_paid ?? 0) : turnover;
           k.totalDueSum = Number(s.total_due ?? turnover);
@@ -158,21 +155,16 @@ export default function Dashboard() {
           k.statusCounts = s.status_counts || {};
         } catch {/* ignore */}
 
-        // getOrders(date) → pour liste + séries
         const list = await getOrders({ restaurant: RESTAURANT_ID, date });
         setOrders(Array.isArray(list) ? list : []);
 
-        // si summary vide, calcule local via commandes
         const summaryEmpty = !k.ordersCount && !k.revenue && (!k.statusCounts || Object.keys(k.statusCounts).length===0);
         if (summaryEmpty) k = aggregateFromOrdersBase(list, base);
 
         setKpis(k);
         setSeries(seriesFromOrdersBase(list, start, end, base));
-
-        // Top plats (basé sur tickets des commandes du jour)
         setTopDishes(await computeTopDishes(list, 60));
       } else {
-        // 2) plage de dates → fallback multi-jours (comme avant)
         const dates = enumerateDates(start, end);
         const allOrders = [];
         for (const d of dates) {
@@ -191,14 +183,14 @@ export default function Dashboard() {
     }
   };
 
-  useEffect(() => { document.title = "Veg'N Bio | Dashboard"; load(); /* eslint-disable-next-line */ }, []);
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, [start, end, base]);
+  useEffect(() => { document.title = "Veg'N Bio | Dashboard"; }, []);
+  // recharge au montage & quand filtres OU RESTAURANT_ID changent
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, [start, end, base, RESTAURANT_ID]);
 
   const sameDay = start === end;
 
   return (
       <section className="p-8 space-y-6">
-        {/* Filtres */}
         <div className="flex items-center justify-between">
           <h1 className="text-xl font-semibold">Dashboard</h1>
           <div className="flex items-center gap-2">
@@ -213,7 +205,6 @@ export default function Dashboard() {
               <span className="opacity-70">→</span>
               <input type="date" className="bg-[#111] px-2 py-1 rounded border border-[#2a2a2a]" value={end} onChange={(e)=>setEnd(e.target.value)} />
             </div>
-            {/* base d'analyse comme Home (optionnel) */}
             <div className="ml-3 flex items-center gap-1">
               <button
                   className={`px-2 py-1 rounded border ${base==="paid" ? "border-emerald-500 bg-emerald-600/20" : "border-[#2a2a2a]"}`}
@@ -229,13 +220,16 @@ export default function Dashboard() {
           </div>
         </div>
 
+        {!RESTAURANT_ID && (
+            <div className="text-amber-300">Sélectionnez un restaurant dans l’entête pour charger les données.</div>
+        )}
+
         {loading ? (
             <div>Chargement…</div>
         ) : err ? (
             <div className="text-red-400">{err}</div>
         ) : (
             <>
-              {/* KPIs (remplis comme Home si jour courant) */}
               <div className="grid md:grid-cols-4 gap-3">
                 <KpiCard title="CA" value={fmt(kpis?.revenue || 0)} />
                 <KpiCard title="Nb commandes" value={String(kpis?.ordersCount || 0)} />
@@ -243,7 +237,6 @@ export default function Dashboard() {
                 <KpiCard title="Taux d’encaissement" value={`${calcRate(kpis)}%`} sub="PAID / Total" />
               </div>
 
-              {/* Courbe + Répartition */}
               <div className="grid lg:grid-cols-3 gap-6">
                 <div className="lg:col-span-2 border border-[#2a2a2a] rounded-lg p-4 bg-[#1a1a1a]">
                   <div className="text-sm opacity-80 mb-3">
@@ -271,7 +264,6 @@ export default function Dashboard() {
                 </div>
               </div>
 
-              {/* Top plats + Live */}
               <div className="grid lg:grid-cols-3 gap-6">
                 <div className="lg:col-span-2 border border-[#2a2a2a] rounded-lg p-4 bg-[#1a1a1a]">
                   <div className="text-sm opacity-80 mb-3">Top 10 plats (Qté puis CA)</div>
@@ -331,7 +323,7 @@ export default function Dashboard() {
   );
 }
 
-// --- UI helpers ---
+// UI helpers
 function KpiCard({ title, value, sub }) {
   return (
       <div className="rounded-lg border border-[#2a2a2a] p-4 bg-[#1a1a1a]">
