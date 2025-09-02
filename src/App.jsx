@@ -9,7 +9,8 @@ import Auth from "./pages/Auth";
 import Orders from "./pages/Orders";
 import OrderDetail from "./pages/OrderDetails";
 import Menu from "./pages/Menu";
-import Dashboard from "./pages/Dashboard"; // <-- nouveau
+import Dashboard from "./pages/Dashboard";
+import RestaurantRoutes from "./components/restaurant/RestaurantRoutes.jsx"; // <-- module restaurateur
 
 function Protected({ children }) {
     const { isAuth } = useSelector((s) => s.user);
@@ -20,18 +21,67 @@ export default function App() {
     const loading = useLoadData();
     const location = useLocation();
     const hideHeader = location.pathname.startsWith("/auth");
+
     if (loading) return <FullScreenLoader />;
 
     return (
         <>
             {!hideHeader && <Header />}
             <Routes>
-                <Route path="/" element={<Protected><Home /></Protected>} />
+                {/* POS existant */}
+                <Route
+                    path="/"
+                    element={
+                        <Protected>
+                            <Home />
+                        </Protected>
+                    }
+                />
                 <Route path="/auth" element={<Auth />} />
-                <Route path="/dashboard" element={<Protected><Dashboard /></Protected>} />
-                <Route path="/orders" element={<Protected><Orders /></Protected>} />
-                <Route path="/orders/:orderId" element={<Protected><OrderDetail /></Protected>} />
-                <Route path="/menu" element={<Protected><Menu /></Protected>} />
+                <Route
+                    path="/dashboard"
+                    element={
+                        <Protected>
+                            <Dashboard />
+                        </Protected>
+                    }
+                />
+                <Route
+                    path="/orders"
+                    element={
+                        <Protected>
+                            <Orders />
+                        </Protected>
+                    }
+                />
+                <Route
+                    path="/orders/:orderId"
+                    element={
+                        <Protected>
+                            <OrderDetail />
+                        </Protected>
+                    }
+                />
+                <Route
+                    path="/menu"
+                    element={
+                        <Protected>
+                            <Menu />
+                        </Protected>
+                    }
+                />
+
+                {/* --- Espace restaurateur (protégé) --- */}
+                <Route
+                    path="/restaurant/*"
+                    element={
+                        <Protected>
+                            <RestaurantRoutes />
+                        </Protected>
+                    }
+                />
+
+                {/* 404 */}
                 <Route path="*" element={<div className="p-8">Page introuvable</div>} />
             </Routes>
         </>
