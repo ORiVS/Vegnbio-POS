@@ -288,7 +288,7 @@ export default function Reservations() {
                     }}
                     className="px-3 py-2 rounded bg-emerald-600 hover:bg-emerald-500"
                 >
-                    {creating ? "Fermer" : "Créer (téléphone / walk-in)"}
+                    {creating ? "Fermer" : "Créer"}
                 </button>
             </div>
 
