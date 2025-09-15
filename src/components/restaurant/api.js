@@ -2,7 +2,7 @@
 
 // ---------- Config ----------
 const ENV_API = (import.meta?.env?.VITE_API_BASE_URL || "").replace(/\/+$/, "");
-const API = ENV_API || "http://localhost:8000/api"; // .env.local : VITE_API_BASE_URL=http://localhost:8000/api
+const API = ENV_API || "https://vegnbio.onrender.com/api"; // .env.local : VITE_API_BASE_URL=https://vegnbio.onrender.com/api
 // ⚠️ Ici on pointe bien sur le namespace "restaurants" (cf. urls.py)
 const ROOT = `${API}/restaurants`;
 const ACCOUNTS_ROOT = `${API}/accounts`;
