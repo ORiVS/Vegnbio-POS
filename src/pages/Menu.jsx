@@ -9,11 +9,13 @@ import {
   applyDiscount,
   getDishes,
   getMenus,
+  getDishAvailability,
   ticket,
 } from "../https";
 import CheckoutDialog from "../components/checkout/CheckoutDialog";
 
-const TODAY = new Date().toISOString().slice(0, 10);
+// Date du jour au format YYYY-MM-DD (robuste aux fuseaux)
+const TODAY = new Date().toLocaleDateString("sv-SE"); // ex: 2025-09-17
 
 // Regroupe les items d'un menu par course_type
 const groupByCourse = (items = []) =>
@@ -25,6 +27,9 @@ const groupByCourse = (items = []) =>
     }, {});
 
 export default function Menu() {
+  // it.dish peut être un objet (lecture) ou un id (écriture)
+  const dishIdOf = (x) => (x && typeof x === "object" ? x.id : x);
+
   // ⚠️ On lit l’ID du resto dans Redux (ex: s.user.restaurantId)
   const restaurantIdFromUser = useSelector((s) => s.user?.restaurantId);
   const RESTAURANT_ID = restaurantIdFromUser || 1; // fallback sécurisé
@@ -32,6 +37,8 @@ export default function Menu() {
   const [currentOrder, setCurrentOrder] = useState(null);
   const [dishes, setDishes] = useState([]);
   const [menus, setMenus] = useState([]);
+  const [availSet, setAvailSet] = useState(() => new Set());
+
   const [lines, setLines] = useState([]);
   const [discount, setDiscount] = useState({ amount: "0.00", percent: "0.00" });
   const [showCheckout, setShowCheckout] = useState(false);
@@ -53,14 +60,21 @@ export default function Menu() {
     (async () => {
       try {
         setLoading(true);
-        // 1) plats actifs
-        const dishList = await getDishes({ is_active: "true" });
-        setDishes(dishList);
 
-        // 2) menus du jour pour ce restaurant
-        const menuList = await getMenus({ restaurant: RESTAURANT_ID, date: TODAY });
-        // Si besoin d’afficher uniquement les menus publiés
-        setMenus((menuList || []).filter((m) => m.is_published !== false));
+        // Chargements en parallèle
+        const [dishList, menuList, availList] = await Promise.all([
+          getDishes({ is_active: "true" }),
+          getMenus({ restaurant: RESTAURANT_ID, date: TODAY }),
+          getDishAvailability({ restaurant: RESTAURANT_ID, date: TODAY }),
+        ]);
+
+        setDishes(Array.isArray(dishList) ? dishList : []);
+        setMenus((Array.isArray(menuList) ? menuList : []).filter((m) => m.is_published !== false));
+
+        const ids = (Array.isArray(availList) ? availList : [])
+            .filter((a) => a.is_available === true)
+            .map((a) => a.dish);
+        setAvailSet(new Set(ids));
       } finally {
         setLoading(false);
       }
@@ -82,9 +96,7 @@ export default function Menu() {
               it.title ??
               it.product_name ??
               "Article",
-          unit_price: Number(
-              it.unit_price ?? it.price ?? it.unitPrice ?? it.amount_ht ?? 0
-          ),
+          unit_price: Number(it.unit_price ?? it.price ?? it.unitPrice ?? it.amount_ht ?? 0),
           quantity: Number(it.quantity ?? it.qty ?? 1),
           status: (it.status ?? "ACTIVE").toUpperCase(),
           is_void: Boolean(it.is_void) || Boolean(it.is_deleted),
@@ -99,9 +111,7 @@ export default function Menu() {
 
     setLines(normalized);
     setCurrentOrder((prev) =>
-        prev
-            ? { ...prev, total_due: t.total_due, paid_amount: t.paid_amount }
-            : prev
+        prev ? { ...prev, total_due: t.total_due, paid_amount: t.paid_amount } : prev
     );
   };
 
@@ -121,7 +131,9 @@ export default function Menu() {
   };
 
   const addFromMenuItem = async (menuItem) => {
-    const d = dishById.get(menuItem.dish);
+    const id = dishIdOf(menuItem.dish);
+    if (!id || !availSet.has(id)) return; // Empêche d’ajouter si indispo
+    const d = dishById.get(id) || (typeof menuItem.dish === "object" ? menuItem.dish : null);
     if (!d) return;
     await add(d);
   };
@@ -171,9 +183,7 @@ export default function Menu() {
               {loading ? (
                   <div className="opacity-80 text-sm">Chargement des menus…</div>
               ) : menus.length === 0 ? (
-                  <div className="opacity-60 text-sm">
-                    Aucun menu publié pour aujourd’hui.
-                  </div>
+                  <div className="opacity-60 text-sm">Aucun menu publié pour aujourd’hui.</div>
               ) : (
                   menus.map((m) => {
                     const groups = groupByCourse(m.items || []);
@@ -188,19 +198,23 @@ export default function Menu() {
 
                           <div className="grid md:grid-cols-2 gap-4">
                             {Object.entries(groups).map(([course, items]) => (
-                                <div
-                                    key={course}
-                                    className="border border-[#2a2a2a] rounded-lg"
-                                >
+                                <div key={course} className="border border-[#2a2a2a] rounded-lg">
                                   <div className="px-3 py-2 bg-[#111] text-xs uppercase tracking-wide opacity-80">
                                     {labelCourse(course)}
                                   </div>
+
                                   <div className="p-3 space-y-2">
                                     {items.map((it) => {
-                                      const dish = dishById.get(it.dish);
-                                      const title = dish?.name || "(Plat indisponible)";
+                                      const dishId = dishIdOf(it.dish);
+                                      const dish =
+                                          dishById.get(dishId) ||
+                                          (typeof it.dish === "object" ? it.dish : null);
+                                      const isAvailable = !!(dishId && availSet.has(dishId));
+
+                                      const title =
+                                          isAvailable && dish ? dish.name : "(Plat indisponible)";
                                       const price =
-                                          dish?.price != null
+                                          isAvailable && dish?.price != null
                                               ? Number(dish.price).toFixed(2) + " €"
                                               : "—";
                                       const allergens = (dish?.allergens || [])
@@ -210,25 +224,27 @@ export default function Menu() {
                                       return (
                                           <button
                                               key={it.id}
-                                              onClick={() => dish && addFromMenuItem(it)}
-                                              className="w-full text-left p-3 rounded bg-[#1a1a1a] hover:bg-[#151515] border border-[#2a2a2a]"
-                                              disabled={!dish}
-                                              title={
-                                                !dish
-                                                    ? "Plat non disponible"
-                                                    : "Ajouter à la commande"
+                                              onClick={() => isAvailable && dish && addFromMenuItem(it)}
+                                              className={
+                                                  "w-full text-left p-3 rounded border border-[#2a2a2a] " +
+                                                  (isAvailable
+                                                      ? "bg-[#1a1a1a] hover:bg-[#151515]"
+                                                      : "bg-[#141414] opacity-60 cursor-not-allowed")
                                               }
+                                              title={
+                                                isAvailable && dish
+                                                    ? "Ajouter à la commande"
+                                                    : "Plat non disponible"
+                                              }
+                                              disabled={!isAvailable || !dish}
+                                              aria-disabled={!isAvailable || !dish}
                                           >
                                             <div className="flex items-center justify-between">
                                               <div className="font-medium">{title}</div>
-                                              <div className="text-sm opacity-80">
-                                                {price}
-                                              </div>
+                                              <div className="text-sm opacity-80">{price}</div>
                                             </div>
                                             {allergens && (
-                                                <div className="text-xs opacity-70 mt-1">
-                                                  {allergens}
-                                                </div>
+                                                <div className="text-xs opacity-70 mt-1">{allergens}</div>
                                             )}
                                           </button>
                                       );
@@ -265,16 +281,12 @@ export default function Menu() {
                       </span>
                           )}
                         </div>
-                        <div className="text-sm opacity-80">
-                          {Number(d.price).toFixed(2)} €
-                        </div>
+                        <div className="text-sm opacity-80">{Number(d.price).toFixed(2)} €</div>
                         <div className="text-xs opacity-70 mt-1">
                           {(d.allergens || []).map((a) => a.label).join(", ")}
                         </div>
                         {d.description && (
-                            <div className="text-xs opacity-60 mt-2 line-clamp-2">
-                              {d.description}
-                            </div>
+                            <div className="text-xs opacity-60 mt-2 line-clamp-2">{d.description}</div>
                         )}
                       </button>
                   ))}
@@ -300,10 +312,7 @@ export default function Menu() {
             {currentOrder && (
                 <div className="space-y-2">
                   {lines.map((l) => (
-                      <div
-                          key={l.id}
-                          className="flex items-center justify-between gap-3"
-                      >
+                      <div key={l.id} className="flex items-center justify-between gap-3">
                         <div>
                           <div className="font-medium">{l.name}</div>
                           <div className="text-xs opacity-70">
@@ -335,17 +344,13 @@ export default function Menu() {
                         className="bg-[#121212] p-2 rounded w-24"
                         placeholder="Remise €"
                         value={discount.amount}
-                        onChange={(e) =>
-                            setDiscount((s) => ({ ...s, amount: e.target.value }))
-                        }
+                        onChange={(e) => setDiscount((s) => ({ ...s, amount: e.target.value }))}
                     />
                     <input
                         className="bg-[#121212] p-2 rounded w-24"
                         placeholder="Remise %"
                         value={discount.percent}
-                        onChange={(e) =>
-                            setDiscount((s) => ({ ...s, percent: e.target.value }))
-                        }
+                        onChange={(e) => setDiscount((s) => ({ ...s, percent: e.target.value }))}
                     />
                     <button
                         className="px-3 py-2 rounded bg-zinc-700 hover:bg-zinc-600"
