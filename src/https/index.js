@@ -72,6 +72,17 @@ export const getDishAvailability = async (params) => {
     return Array.isArray(res?.data) ? res.data : (res?.data?.results || []);
 };
 
+// --- Ticket PDF ---
+export const getTicketPdf = async (orderId, { inline = true } = {}) => {
+    const res = await api.get(`/pos/orders/${orderId}/ticket.pdf`, {
+        responseType: "blob",
+        params: inline ? { inline: 1 } : {},
+    });
+    // Axios renvoie déjà un Blob; on s'assure du type
+    const blob = res.data instanceof Blob ? res.data : new Blob([res.data], { type: "application/pdf" });
+    return blob;
+};
+
 /* ============ DISCOUNT ============ */
 export const applyDiscount = (orderId, payload) =>
     api.post(`/pos/orders/${orderId}/apply_discount/`, payload);

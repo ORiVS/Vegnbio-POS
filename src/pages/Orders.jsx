@@ -1,7 +1,15 @@
+// src/pages/Orders.jsx
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useSelector } from "react-redux";
-import { getOrders, hold, reopen, cancelOrder, ticket } from "../https";
+import {
+    getOrders,
+    hold,
+    reopen,
+    cancelOrder,
+    ticket,        // fallback JSON pour debug
+    getTicketPdf,  // <-- nouveau : récupère le PDF authentifié
+} from "../https";
 import CheckoutDialog from "../components/checkout/CheckoutDialog";
 
 const isPaid      = (o) => String(o.status).toUpperCase() === "PAID";
@@ -26,7 +34,7 @@ const statusRank = (s) => {
 
 export default function Orders() {
     const navigate = useNavigate();
-    const RESTAURANT_ID = useSelector(s => s.user.activeRestaurantId);
+    const RESTAURANT_ID = useSelector((s) => s.user?.activeRestaurantId);
 
     const [orders, setOrders] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -37,7 +45,7 @@ export default function Orders() {
     const [todayOnly, setTodayOnly] = useState(true);
 
     // Tri
-    const [sortBy, setSortBy]   = useState("id");
+    const [sortBy, setSortBy] = useState("id");
     const [sortDir, setSortDir] = useState("desc");
 
     const reload = async () => {
@@ -67,16 +75,28 @@ export default function Orders() {
     }, []);
 
     // charge au montage & quand RESTAURANT_ID change
-    useEffect(() => { reload(); /* eslint-disable-next-line */ }, [RESTAURANT_ID]);
+    useEffect(() => {
+        reload();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [RESTAURANT_ID]);
 
     // recharge quand on change Aujourd’hui/Toutes
-    useEffect(() => { reload(); /* eslint-disable-next-line */ }, [todayOnly]);
+    useEffect(() => {
+        reload();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [todayOnly]);
 
-    const doAndReload = async (p) => { await p; await reload(); };
+    const doAndReload = async (p) => {
+        await p;
+        await reload();
+    };
 
     const toggleSort = (col) => {
-        if (col === sortBy) setSortDir(d => (d === "asc" ? "desc" : "asc"));
-        else { setSortBy(col); setSortDir(col === "id" ? "desc" : "asc"); }
+        if (col === sortBy) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+        else {
+            setSortBy(col);
+            setSortDir(col === "id" ? "desc" : "asc");
+        }
     };
 
     const sortedOrders = useMemo(() => {
@@ -86,7 +106,8 @@ export default function Orders() {
         arr.sort((a, b) => {
             if (sortBy === "id") return (Number(a.id ?? 0) - Number(b.id ?? 0)) * dir;
             if (sortBy === "status") {
-                const ar = statusRank(a.status), br = statusRank(b.status);
+                const ar = statusRank(a.status),
+                    br = statusRank(b.status);
                 if (ar !== br) return (ar - br) * dir;
                 return String(a.status || "").localeCompare(String(b.status || "")) * dir;
             }
@@ -100,7 +121,11 @@ export default function Orders() {
     }, [orders, sortBy, sortDir]);
 
     const Arrow = ({ active, dir }) => (
-        <span className={`ml-1 inline-block text-xs transition-opacity ${active ? "opacity-100" : "opacity-40"}`}>
+        <span
+            className={`ml-1 inline-block text-xs transition-opacity ${
+                active ? "opacity-100" : "opacity-40"
+            }`}
+        >
       {active ? (dir === "asc" ? "↑" : "↓") : "↕"}
     </span>
     );
@@ -108,23 +133,95 @@ export default function Orders() {
     const SortHeader = ({ col, children }) => {
         const active = sortBy === col;
         return (
-            <button type="button" onClick={() => toggleSort(col)} className="inline-flex items-center gap-1 hover:underline" title="Trier">
+            <button
+                type="button"
+                onClick={() => toggleSort(col)}
+                className="inline-flex items-center gap-1 hover:underline"
+                title="Trier"
+            >
                 <span>{children}</span>
                 <Arrow active={active} dir={active ? sortDir : undefined} />
             </button>
         );
     };
 
+    // --- PDF helpers ---
+    const openTicketPdf = async (orderId, { download = false, print = false } = {}) => {
+        try {
+            const blob = await getTicketPdf(orderId, { inline: true });
+            const url = URL.createObjectURL(blob);
+
+            if (print) {
+                // impression silencieuse via iframe invisible
+                const iframe = document.createElement("iframe");
+                iframe.style.position = "fixed";
+                iframe.style.right = "0";
+                iframe.style.bottom = "0";
+                iframe.style.width = "0";
+                iframe.style.height = "0";
+                iframe.style.border = "0";
+                iframe.onload = () => {
+                    try {
+                        iframe.contentWindow?.focus();
+                        iframe.contentWindow?.print();
+                    } catch {}
+                    setTimeout(() => {
+                        document.body.removeChild(iframe);
+                        URL.revokeObjectURL(url);
+                    }, 1500);
+                };
+                iframe.src = url;
+                document.body.appendChild(iframe);
+                return;
+            }
+
+            if (download) {
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = `ticket-${orderId}.pdf`;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                setTimeout(() => URL.revokeObjectURL(url), 5000);
+                return;
+            }
+
+            // vue dans un nouvel onglet
+            window.open(url, "_blank", "noopener");
+            setTimeout(() => URL.revokeObjectURL(url), 30000);
+        } catch (e) {
+            // fallback : JSON du ticket (utile en dev si le PDF n’est pas encore branché)
+            try {
+                const { data } = await ticket(orderId);
+                alert("Ticket (JSON fallback):\n\n" + JSON.stringify(data, null, 2));
+            } catch {
+                alert("Impossible d’ouvrir le ticket.");
+            }
+        }
+    };
+
     const FilterSegment = () => (
         <div className="inline-flex rounded-lg overflow-hidden border border-[#2a2a2a]">
             <button
-                className={`px-3 py-1.5 text-sm ${todayOnly ? "bg-emerald-600/20 text-emerald-300" : "bg-[#1a1a1a] hover:bg-[#151515] opacity-90"}`}
+                className={`px-3 py-1.5 text-sm ${
+                    todayOnly
+                        ? "bg-emerald-600/20 text-emerald-300"
+                        : "bg-[#1a1a1a] hover:bg-[#151515] opacity-90"
+                }`}
                 onClick={() => setTodayOnly(true)}
-            >Aujourd’hui</button>
+            >
+                Aujourd’hui
+            </button>
             <button
-                className={`px-3 py-1.5 text-sm ${!todayOnly ? "bg-emerald-600/20 text-emerald-300" : "bg-[#1a1a1a] hover:bg-[#151515] opacity-90"}`}
+                className={`px-3 py-1.5 text-sm ${
+                    !todayOnly
+                        ? "bg-emerald-600/20 text-emerald-300"
+                        : "bg-[#1a1a1a] hover:bg-[#151515] opacity-90"
+                }`}
                 onClick={() => setTodayOnly(false)}
-            >Toutes</button>
+            >
+                Toutes
+            </button>
         </div>
     );
 
@@ -136,7 +233,9 @@ export default function Orders() {
             </div>
 
             {!RESTAURANT_ID && (
-                <div className="mb-4 text-amber-300">Sélectionnez un restaurant dans l’entête pour afficher les commandes.</div>
+                <div className="mb-4 text-amber-300">
+                    Sélectionnez un restaurant dans l’entête pour afficher les commandes.
+                </div>
             )}
 
             {loading ? (
@@ -148,10 +247,18 @@ export default function Orders() {
                     <table className="w-full text-sm">
                         <thead className="bg-[#151515]">
                         <tr>
-                            <th className="text-left p-3"><SortHeader col="id">#</SortHeader></th>
-                            <th className="text-left p-3"><SortHeader col="status">Statut</SortHeader></th>
-                            <th className="text-left p-3"><SortHeader col="total_due">Total dû</SortHeader></th>
-                            <th className="text-left p-3"><SortHeader col="paid_amount">Payé</SortHeader></th>
+                            <th className="text-left p-3">
+                                <SortHeader col="id">#</SortHeader>
+                            </th>
+                            <th className="text-left p-3">
+                                <SortHeader col="status">Statut</SortHeader>
+                            </th>
+                            <th className="text-left p-3">
+                                <SortHeader col="total_due">Total dû</SortHeader>
+                            </th>
+                            <th className="text-left p-3">
+                                <SortHeader col="paid_amount">Payé</SortHeader>
+                            </th>
                             <th className="text-left p-3">Actions</th>
                         </tr>
                         </thead>
@@ -162,7 +269,8 @@ export default function Orders() {
                             const _canReopen = !disabledAll && canReopen(o);
                             const _canCancel = !disabledAll && canCancel(o);
                             const _canCheckout = !disabledAll && canCheckout(o);
-                            const btnBase = "px-2 py-1 rounded disabled:opacity-40 disabled:cursor-not-allowed";
+                            const btnBase =
+                                "px-2 py-1 rounded disabled:opacity-40 disabled:cursor-not-allowed";
 
                             return (
                                 <tr
@@ -176,22 +284,88 @@ export default function Orders() {
                                 >
                                     <td className="p-3">{o.id}</td>
                                     <td className="p-3">{o.status}</td>
-                                    <td className="p-3">{Number(o.total_due ?? 0).toFixed(2)} €</td>
-                                    <td className="p-3">{Number(o.paid_amount ?? 0).toFixed(2)} €</td>
+                                    <td className="p-3">
+                                        {Number(o.total_due ?? 0).toFixed(2)} €
+                                    </td>
+                                    <td className="p-3">
+                                        {Number(o.paid_amount ?? 0).toFixed(2)} €
+                                    </td>
                                     <td className="p-3">
                                         <div className="flex flex-wrap gap-2">
-                                            <button className={`${btnBase} bg-amber-600/80 hover:bg-amber-600`} disabled={!_canHold}
-                                                    onClick={(e) => { e.stopPropagation(); doAndReload(hold(o.id)); }}>Hold</button>
-                                            <button className={`${btnBase} bg-sky-600/80 hover:bg-sky-600`} disabled={!_canReopen}
-                                                    onClick={(e) => { e.stopPropagation(); doAndReload(reopen(o.id)); }}>Reopen</button>
-                                            <button className={`${btnBase} bg-rose-600/80 hover:bg-rose-600`} disabled={!_canCancel}
-                                                    onClick={(e) => { e.stopPropagation(); doAndReload(cancelOrder(o.id)); }}>Annuler</button>
-                                            <button className={`${btnBase} bg-emerald-600/80 hover:bg-emerald-600`} disabled={!_canCheckout}
-                                                    onClick={(e) => { e.stopPropagation(); setCheckoutOrder(o); }}>Encaisser</button>
-                                            <button className={`${btnBase} bg-zinc-700 hover:bg-zinc-600`}
-                                                    onClick={async (e) => { e.stopPropagation(); const { data } = await ticket(o.id); alert(JSON.stringify(data, null, 2)); }}>
-                                                Ticket
+                                            <button
+                                                className={`${btnBase} bg-amber-600/80 hover:bg-amber-600`}
+                                                disabled={!_canHold}
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    doAndReload(hold(o.id));
+                                                }}
+                                            >
+                                                Hold
                                             </button>
+                                            <button
+                                                className={`${btnBase} bg-sky-600/80 hover:bg-sky-600`}
+                                                disabled={!_canReopen}
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    doAndReload(reopen(o.id));
+                                                }}
+                                            >
+                                                Reopen
+                                            </button>
+                                            <button
+                                                className={`${btnBase} bg-rose-600/80 hover:bg-rose-600`}
+                                                disabled={!_canCancel}
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    doAndReload(cancelOrder(o.id));
+                                                }}
+                                            >
+                                                Annuler
+                                            </button>
+                                            <button
+                                                className={`${btnBase} bg-emerald-600/80 hover:bg-emerald-600`}
+                                                disabled={!_canCheckout}
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setCheckoutOrder(o);
+                                                }}
+                                            >
+                                                Encaisser
+                                            </button>
+
+                                            {/* Ticket : voir / télécharger / imprimer */}
+                                            <div className="inline-flex gap-1">
+                                                <button
+                                                    className={`${btnBase} bg-zinc-700 hover:bg-zinc-600`}
+                                                    title="Voir le ticket PDF"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        openTicketPdf(o.id);
+                                                    }}
+                                                >
+                                                    Ticket
+                                                </button>
+                                                <button
+                                                    className={`${btnBase} bg-zinc-700/70 hover:bg-zinc-600`}
+                                                    title="Télécharger le ticket"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        openTicketPdf(o.id, { download: true });
+                                                    }}
+                                                >
+                                                    ⬇︎
+                                                </button>
+                                                <button
+                                                    className={`${btnBase} bg-zinc-700/70 hover:bg-zinc-600`}
+                                                    title="Imprimer le ticket"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        openTicketPdf(o.id, { print: true });
+                                                    }}
+                                                >
+                                                    🖨
+                                                </button>
+                                            </div>
                                         </div>
                                     </td>
                                 </tr>
@@ -201,7 +375,9 @@ export default function Orders() {
                         {sortedOrders.length === 0 && (
                             <tr>
                                 <td colSpan={5} className="p-6 text-center opacity-70">
-                                    {todayOnly ? "Aucune commande aujourd’hui." : "Aucune commande."}
+                                    {todayOnly
+                                        ? "Aucune commande aujourd’hui."
+                                        : "Aucune commande."}
                                 </td>
                             </tr>
                         )}
@@ -214,7 +390,10 @@ export default function Orders() {
                 open={!!checkoutOrder}
                 order={checkoutOrder}
                 onClose={() => setCheckoutOrder(null)}
-                onSuccess={async () => { setCheckoutOrder(null); await reload(); }}
+                onSuccess={async () => {
+                    setCheckoutOrder(null);
+                    await reload();
+                }}
             />
         </section>
     );
