@@ -378,7 +378,7 @@ export default function Reservations() {
                             />
                         </Field>
 
-                        <Field label="Nombre de couverts">
+                        <Field label="Nombre de places">
                             <input
                                 min={1}
                                 type="number"
