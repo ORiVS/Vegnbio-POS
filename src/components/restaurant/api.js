@@ -281,13 +281,48 @@ export function apiDeleteClosure(closureId) {
 //                              RESERVATIONS
 // ======================================================================
 export function apiCreateReservation(payload) {
+    // Backend attend : { customer_email, restaurant, date, start_time, end_time, party_size }
     const body = { ...payload };
+
+    // coercions id
     if (body.restaurant) body.restaurant = toId(body.restaurant);
-    if (body.room) body.room = toId(body.room);
+    if (body.room) delete body.room; // read-only au create
+    if ("full_restaurant" in body) delete body.full_restaurant; // read-only au create
+
+    // validations minimales côté front pour des erreurs plus claires
+    if (!body.customer_email || !/\S+@\S+\.\S+/.test(String(body.customer_email))) {
+        throw new Error("customer_email requis et valide.");
+    }
+    if (!body.restaurant && body.restaurant !== 0) {
+        throw new Error("restaurant requis.");
+    }
+    if (!body.date) throw new Error("date requise (YYYY-MM-DD).");
+    if (!body.start_time) throw new Error("start_time requis (HH:MM).");
+    if (!body.end_time) throw new Error("end_time requis (HH:MM).");
+    const ps = Number(body.party_size);
+    if (!ps || ps <= 0) {
+        throw new Error("party_size doit être > 0.");
+    }
+    body.party_size = ps;
+
     // correspond au ViewSet reservations
     return http(`/reservations/`, { method: "POST", body });
 }
 export const apiCreateReservationAsRestaurateur = apiCreateReservation;
+
+export function apiAssignReservation(reservationId, assignPayload) {
+    // assignPayload : { full_restaurant: true } OU { room: <id> }
+    const rid = mustId("apiAssignReservation.reservationId", reservationId);
+    const body = { ...assignPayload };
+    if ("room" in body && body.room != null) body.room = toId(body.room);
+    // validation minimale
+    const wantsFull = body.full_restaurant === true;
+    const hasRoom = Number.isFinite(Number(body.room)) && Number(body.room) > 0;
+    if (!wantsFull && !hasRoom) {
+        throw new Error("Fournir soit { full_restaurant: true } soit { room: <id> }.");
+    }
+    return http(`/reservations/${rid}/assign/`, { method: "POST", body });
+}
 
 export function apiModerateReservation(reservationId, nextStatus) {
     return http(
