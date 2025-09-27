@@ -10,7 +10,7 @@ import Orders from "./pages/Orders";
 import OrderDetail from "./pages/OrderDetails";
 import Menu from "./pages/Menu";
 import Dashboard from "./pages/Dashboard";
-import RestaurantRoutes from "./components/restaurant/RestaurantRoutes.jsx"; // <-- module restaurateur
+import RestaurantRoutes from "./components/restaurant/RestaurantRoutes.jsx";
 
 function Protected({ children }) {
     const { isAuth } = useSelector((s) => s.user);
@@ -28,7 +28,7 @@ export default function App() {
         <>
             {!hideHeader && <Header />}
             <Routes>
-                {/* POS existant */}
+                {/* POS */}
                 <Route
                     path="/"
                     element={
@@ -71,7 +71,7 @@ export default function App() {
                     }
                 />
 
-                {/* --- Espace restaurateur (protégé) --- */}
+                {/* — Espace restaurateur (toutes les sous-routes ici) — */}
                 <Route
                     path="/restaurant/*"
                     element={

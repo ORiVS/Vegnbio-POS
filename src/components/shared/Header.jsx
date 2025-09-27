@@ -20,6 +20,12 @@ const RESTO_LINKS = [
     { to: "/restaurant/settings", label: "Paramètres" },
 ];
 
+// ✅ Ajout : liens “Fournisseurs”
+const SUPPLIER_LINKS = [
+    { to: "/restaurant/market", label: "Marketplace" },
+    { to: "/restaurant/purchasing/orders", label: "Mes commandes fournisseurs" },
+];
+
 export default function Header() {
     const user = useSelector((s) => s.user);
     const nav = useNavigate();
@@ -168,6 +174,21 @@ export default function Header() {
 
                         <GroupTitle>Restaurant</GroupTitle>
                         {RESTO_LINKS.map(({ to, label }) => (
+                            <li key={to}>
+                                <button
+                                    onClick={() => go(to)}
+                                    className="w-full text-left px-4 py-2 text-sm hover:bg-[#161616] focus:outline-none focus:ring focus:ring-emerald-500/30"
+                                >
+                                    {label}
+                                </button>
+                            </li>
+                        ))}
+
+                        <Divider />
+
+                        {/* ✅ Section Fournisseurs */}
+                        <GroupTitle>Fournisseurs</GroupTitle>
+                        {SUPPLIER_LINKS.map(({ to, label }) => (
                             <li key={to}>
                                 <button
                                     onClick={() => go(to)}

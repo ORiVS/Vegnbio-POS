@@ -15,26 +15,36 @@ import Rooms from "./pages/settings/Rooms";
 import Hours from "./pages/settings/Hours";
 import Closures from "./pages/settings/Closures";
 
+// ✅ nouvelles pages fournisseurs
+import MarketList from "./pages/market/MarketList";
+import MyOrders from "./pages/purchasing/MyOrders";
+
 export default function RestaurantRoutes() {
-    return (
-        <Routes>
-            <Route index element={<Navigate to="dashboard" replace />} />
-            <Route path="dashboard" element={<Dashboard />} />
-            <Route path="availability" element={<Availability />} />
-            <Route path="reservations" element={<Reservations />} />
+        return (
+            <Routes>
+                    <Route index element={<Navigate to="dashboard" replace />} />
+                    <Route path="dashboard" element={<Dashboard />} />
+                    <Route path="availability" element={<Availability />} />
+                    <Route path="reservations" element={<Reservations />} />
 
-            <Route path="events" element={<EventsList />} />
-            <Route path="events/new" element={<EventForm mode="create" />} />
-            <Route path="events/:id/edit" element={<EventForm mode="edit" />} />
-            <Route path="events/:id/invitations" element={<EventInvitations />} />
-            <Route path="events/:id/registrations" element={<EventRegistrations />} />
+                    {/* Évènements */}
+                    <Route path="events" element={<EventsList />} />
+                    <Route path="events/new" element={<EventForm mode="create" />} />
+                    <Route path="events/:id/edit" element={<EventForm mode="edit" />} />
+                    <Route path="events/:id/invitations" element={<EventInvitations />} />
+                    <Route path="events/:id/registrations" element={<EventRegistrations />} />
 
-            <Route path="settings" element={<RestaurantSettings />} />
-            <Route path="settings/rooms" element={<Rooms />} />
-            <Route path="settings/hours" element={<Hours />} />
-            <Route path="settings/closures" element={<Closures />} />
+                    {/* Paramètres */}
+                    <Route path="settings" element={<RestaurantSettings />} />
+                    <Route path="settings/rooms" element={<Rooms />} />
+                    <Route path="settings/hours" element={<Hours />} />
+                    <Route path="settings/closures" element={<Closures />} />
 
-            <Route path="*" element={<Navigate to="dashboard" replace />} />
-        </Routes>
-    );
+                    {/* ✅ Fournisseurs */}
+                    <Route path="market" element={<MarketList />} />
+                    <Route path="purchasing/orders" element={<MyOrders />} />
+
+                    <Route path="*" element={<Navigate to="dashboard" replace />} />
+            </Routes>
+        );
 }
