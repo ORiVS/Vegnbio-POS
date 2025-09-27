@@ -3,9 +3,12 @@
 // ---------- Config ----------
 const ENV_API = (import.meta?.env?.VITE_API_BASE_URL || "").replace(/\/+$/, "");
 const API = ENV_API || "https://vegnbio.onrender.com/api"; // .env.local : VITE_API_BASE_URL=https://vegnbio.onrender.com/api
-// ⚠️ Ici on pointe bien sur le namespace "restaurants" (cf. urls.py)
-const ROOT = `${API}/restaurants`;
+
+// Namespaces back (cf. urls.py de chaque app)
+const RESTAURANTS_ROOT = `${API}/restaurants`;
 const ACCOUNTS_ROOT = `${API}/accounts`;
+const MARKET_ROOT = `${API}/market`;
+const PURCHASING_ROOT = `${API}/purchasing`;
 const DEBUG = true;
 
 // ---------- Helpers ----------
@@ -30,6 +33,9 @@ function toId(v) {
         if ("pk" in v && v.pk != null) return toId(v.pk);
         if ("restaurant" in v && v.restaurant != null) return toId(v.restaurant);
         if ("data" in v && v.data != null) return toId(v.data);
+        if ("offer" in v && v.offer != null) return toId(v.offer);
+        if ("supplier" in v && v.supplier != null) return toId(v.supplier);
+        if ("order" in v && v.order != null) return toId(v.order);
     }
     return v;
 }
@@ -47,7 +53,10 @@ function mustId(name, v) {
 }
 
 // convertit certaines clés objet -> id
-function sanitizeQuery(obj, keys = ["restaurant", "room", "event", "reservation", "closure", "customer_id"]) {
+function sanitizeQuery(obj, keys = [
+    "restaurant", "room", "event", "reservation",
+    "closure", "customer_id", "offer", "supplier", "order"
+]) {
     if (!obj) return obj;
     const out = { ...obj };
     for (const k of keys) {
@@ -78,7 +87,6 @@ function appendParams(url, params) {
     if (!params || Object.keys(params).length === 0) return url;
     const qs = buildQS(params);
     if (!qs) return url;
-    // si l’URL a déjà un "?", on concatène
     if (url.includes("?")) {
         const qs2 = qs.replace(/^\?/, "&");
         return `${url}${qs2}`;
@@ -87,7 +95,7 @@ function appendParams(url, params) {
 }
 
 // ---------- Core HTTP (JWT, pas de cookies) ----------
-async function http(path, { method = "GET", body, headers, params } = {}) {
+async function httpRoot(ROOT, path, { method = "GET", body, headers, params } = {}) {
     let url = `${ROOT}${ensureLeadingSlash(path)}`;
     url = appendParams(url, params);
 
@@ -147,7 +155,7 @@ async function http(path, { method = "GET", body, headers, params } = {}) {
     return isJSON ? data : text;
 }
 
-// HTTP absolu (pour /api/accounts/…)
+// HTTP absolu (pour /api/accounts/… ou tout URL complet)
 async function httpAbs(url, { method = "GET", body, headers, params } = {}) {
     url = appendParams(url, params);
 
@@ -206,37 +214,40 @@ async function httpAbs(url, { method = "GET", body, headers, params } = {}) {
     return isJSON ? data : text;
 }
 
+// Shortcuts spécifiques aux roots
+const httpResto = (p, opts) => httpRoot(RESTAURANTS_ROOT, p, opts);
+const httpMarket = (p, opts) => httpRoot(MARKET_ROOT, p, opts);
+const httpPurch  = (p, opts) => httpRoot(PURCHASING_ROOT, p, opts);
+
 // ======================================================================
 //                               RESTAURANTS
 // ======================================================================
 export function apiGetRestaurant(restaurantId) {
     const rid = mustId("apiGetRestaurant.restaurantId", restaurantId);
-    return http(`/restaurants/${rid}/`, { method: "GET" });
+    return httpResto(`/restaurants/${rid}/`, { method: "GET" });
 }
 
 export function apiUpdateRestaurant(restaurantId, payload) {
     const rid = mustId("apiUpdateRestaurant.restaurantId", restaurantId);
-    return http(`/restaurants/${rid}/`, { method: "PATCH", body: payload });
+    return httpResto(`/restaurants/${rid}/`, { method: "PATCH", body: payload });
 }
 
 export function apiGetAvailability(restaurantId, dateISO) {
     const rid = mustId("apiGetAvailability.restaurantId", restaurantId);
-    // correspond à: /api/restaurants/restaurants/<id>/dashboard/?date=YYYY-MM-DD
-    return http(`/restaurants/${rid}/dashboard/`, { method: "GET", params: { date: dateISO } });
+    return httpResto(`/restaurants/${rid}/dashboard/`, { method: "GET", params: { date: dateISO } });
 }
 
 export function apiGetRestaurantReservations(restaurantId, { status } = {}) {
     const rid = mustId("apiGetRestaurantReservations.restaurantId", restaurantId);
-    // correspond à: /api/restaurants/restaurants/<id>/reservations/?status=...
-    return http(`/restaurants/${rid}/reservations/`, { method: "GET", params: { status } });
+    return httpResto(`/restaurants/${rid}/reservations/`, { method: "GET", params: { status } });
 }
 
 export function apiStatsReservations() {
-    return http(`/reservations/statistics/`, { method: "GET" });
+    return httpResto(`/reservations/statistics/`, { method: "GET" });
 }
 
 export function apiListRestaurants(params = {}) {
-    return http(`/restaurants/`, { method: "GET", params });
+    return httpResto(`/restaurants/`, { method: "GET", params });
 }
 
 // ======================================================================
@@ -244,101 +255,65 @@ export function apiListRestaurants(params = {}) {
 // ======================================================================
 export function apiCreateRoom({ restaurant, name, capacity }) {
     const rid = mustId("apiCreateRoom.restaurant", restaurant);
-    return http(`/rooms/`, { method: "POST", body: { restaurant: rid, name, capacity } });
+    return httpResto(`/rooms/`, { method: "POST", body: { restaurant: rid, name, capacity } });
 }
 
 export function apiUpdateRoom(roomId, patch) {
     const body = patch && patch.restaurant ? { ...patch, restaurant: toId(patch.restaurant) } : patch;
-    return http(`/rooms/${mustId("apiUpdateRoom.roomId", roomId)}/`, { method: "PATCH", body });
+    return httpResto(`/rooms/${mustId("apiUpdateRoom.roomId", roomId)}/`, { method: "PATCH", body });
 }
 
 export function apiDeleteRoom(roomId) {
-    return http(`/rooms/${mustId("apiDeleteRoom.roomId", roomId)}/`, { method: "DELETE" });
+    return httpResto(`/rooms/${mustId("apiDeleteRoom.roomId", roomId)}/`, { method: "DELETE" });
 }
 
 // ======================================================================
 //                                CLOSURES
 // ======================================================================
 export function apiListClosures() {
-    return http(`/closures/`, { method: "GET" });
+    return httpResto(`/closures/`, { method: "GET" });
 }
 
 export function apiCreateClosure({ restaurant, date, reason }) {
     const rid = mustId("apiCreateClosure.restaurant", restaurant);
-    return http(`/closures/`, { method: "POST", body: { restaurant: rid, date, reason } });
+    return httpResto(`/closures/`, { method: "POST", body: { restaurant: rid, date, reason } });
 }
 
 export function apiUpdateClosure(closureId, patch) {
     const body = patch && patch.restaurant ? { ...patch, restaurant: toId(patch.restaurant) } : patch;
-    return http(`/closures/${mustId("apiUpdateClosure.closureId", closureId)}/`, { method: "PATCH", body });
+    return httpResto(`/closures/${mustId("apiUpdateClosure.closureId", closureId)}/`, { method: "PATCH", body });
 }
 
 export function apiDeleteClosure(closureId) {
-    return http(`/closures/${mustId("apiDeleteClosure.closureId", closureId)}/`, { method: "DELETE" });
+    return httpResto(`/closures/${mustId("apiDeleteClosure.closureId", closureId)}/`, { method: "DELETE" });
 }
 
 // ======================================================================
 //                              RESERVATIONS
 // ======================================================================
 export function apiCreateReservation(payload) {
-    // Backend attend : { customer_email, restaurant, date, start_time, end_time, party_size }
     const body = { ...payload };
-
-    // coercions id
     if (body.restaurant) body.restaurant = toId(body.restaurant);
-    if (body.room) delete body.room; // read-only au create
-    if ("full_restaurant" in body) delete body.full_restaurant; // read-only au create
-
-    // validations minimales côté front pour des erreurs plus claires
-    if (!body.customer_email || !/\S+@\S+\.\S+/.test(String(body.customer_email))) {
-        throw new Error("customer_email requis et valide.");
-    }
-    if (!body.restaurant && body.restaurant !== 0) {
-        throw new Error("restaurant requis.");
-    }
-    if (!body.date) throw new Error("date requise (YYYY-MM-DD).");
-    if (!body.start_time) throw new Error("start_time requis (HH:MM).");
-    if (!body.end_time) throw new Error("end_time requis (HH:MM).");
-    const ps = Number(body.party_size);
-    if (!ps || ps <= 0) {
-        throw new Error("party_size doit être > 0.");
-    }
-    body.party_size = ps;
-
-    // correspond au ViewSet reservations
-    return http(`/reservations/`, { method: "POST", body });
+    if (body.room) body.room = toId(body.room);
+    return httpResto(`/reservations/`, { method: "POST", body });
 }
 export const apiCreateReservationAsRestaurateur = apiCreateReservation;
 
-export function apiAssignReservation(reservationId, assignPayload) {
-    // assignPayload : { full_restaurant: true } OU { room: <id> }
-    const rid = mustId("apiAssignReservation.reservationId", reservationId);
-    const body = { ...assignPayload };
-    if ("room" in body && body.room != null) body.room = toId(body.room);
-    // validation minimale
-    const wantsFull = body.full_restaurant === true;
-    const hasRoom = Number.isFinite(Number(body.room)) && Number(body.room) > 0;
-    if (!wantsFull && !hasRoom) {
-        throw new Error("Fournir soit { full_restaurant: true } soit { room: <id> }.");
-    }
-    return http(`/reservations/${rid}/assign/`, { method: "POST", body });
-}
-
 export function apiModerateReservation(reservationId, nextStatus) {
-    return http(
+    return httpResto(
         `/reservations/${mustId("apiModerateReservation.reservationId", reservationId)}/moderate/`,
         { method: "POST", body: { status: nextStatus } }
     );
 }
 
 export function apiCancelReservation(reservationId) {
-    return http(`/reservations/${mustId("apiCancelReservation.reservationId", reservationId)}/cancel/`, {
+    return httpResto(`/reservations/${mustId("apiCancelReservation.reservationId", reservationId)}/cancel/`, {
         method: "POST",
     });
 }
 
 export function apiDeleteReservation(reservationId) {
-    return http(`/reservations/${mustId("apiDeleteReservation.reservationId", reservationId)}/`, {
+    return httpResto(`/reservations/${mustId("apiDeleteReservation.reservationId", reservationId)}/`, {
         method: "DELETE",
     });
 }
@@ -348,53 +323,51 @@ export function apiDeleteReservation(reservationId) {
 // ======================================================================
 export function apiListEvents(restaurantId, params = {}) {
     const rid = mustId("apiListEvents.restaurantId", restaurantId);
-    // ViewSet Evenement + filtre ?restaurant=<id> (+ date/type/status/is_public)
     const q = { ...params, restaurant: rid };
-    return http(`/evenements/`, { method: "GET", params: q });
-    // Variante (action custom list par restaurant) si tu préfères:
-    // return http(`/restaurants/${rid}/evenements/`, { method: "GET" });
+    return httpResto(`/evenements/`, { method: "GET", params: q });
+    // Variante : /restaurants/:id/evenements/
 }
 
 export function apiCreateEvent(payload) {
     const body = { ...payload };
     if (body.restaurant) body.restaurant = toId(body.restaurant);
     if (body.room) body.room = toId(body.room);
-    return http(`/evenements/`, { method: "POST", body });
+    return httpResto(`/evenements/`, { method: "POST", body });
 }
 
 export function apiUpdateEvent(eventId, patch) {
     const body = { ...patch };
     if (body.restaurant) body.restaurant = toId(body.restaurant);
     if (body.room) body.room = toId(body.room);
-    return http(`/evenements/${mustId("apiUpdateEvent.eventId", eventId)}/`, { method: "PATCH", body });
+    return httpResto(`/evenements/${mustId("apiUpdateEvent.eventId", eventId)}/`, { method: "PATCH", body });
 }
 
 export function apiDeleteEvent(eventId) {
-    return http(`/evenements/${mustId("apiDeleteEvent.eventId", eventId)}/`, { method: "DELETE" });
+    return httpResto(`/evenements/${mustId("apiDeleteEvent.eventId", eventId)}/`, { method: "DELETE" });
 }
 
 export function apiPublishEvent(eventId) {
-    return http(`/evenements/${mustId("apiPublishEvent.eventId", eventId)}/publish/`, { method: "POST" });
+    return httpResto(`/evenements/${mustId("apiPublishEvent.eventId", eventId)}/publish/`, { method: "POST" });
 }
 
 export function apiCancelEvent(eventId) {
-    return http(`/evenements/${mustId("apiCancelEvent.eventId", eventId)}/cancel/`, { method: "POST" });
+    return httpResto(`/evenements/${mustId("apiCancelEvent.eventId", eventId)}/cancel/`, { method: "POST" });
 }
 
 export function apiCloseEvent(eventId) {
-    return http(`/evenements/${mustId("apiCloseEvent.eventId", eventId)}/close/`, { method: "POST" });
+    return httpResto(`/evenements/${mustId("apiCloseEvent.eventId", eventId)}/close/`, { method: "POST" });
 }
 
 export function apiReopenEvent(eventId) {
-    return http(`/evenements/${mustId("apiReopenEvent.eventId", eventId)}/reopen/`, { method: "POST" });
+    return httpResto(`/evenements/${mustId("apiReopenEvent.eventId", eventId)}/reopen/`, { method: "POST" });
 }
 
 export function apiGetRegistrations(eventId) {
-    return http(`/evenements/${mustId("apiGetRegistrations.eventId", eventId)}/registrations/`, { method: "GET" });
+    return httpResto(`/evenements/${mustId("apiGetRegistrations.eventId", eventId)}/registrations/`, { method: "GET" });
 }
 
 export function apiInvite(eventId, { email, phone }) {
-    return http(`/evenements/${mustId("apiInvite.eventId", eventId)}/invite/`, {
+    return httpResto(`/evenements/${mustId("apiInvite.eventId", eventId)}/invite/`, {
         method: "POST",
         body: { email, phone },
     });
@@ -402,7 +375,7 @@ export function apiInvite(eventId, { email, phone }) {
 export const apiSendInvite = apiInvite;
 
 export function apiInviteBulk(eventId, emails = []) {
-    return http(`/evenements/${mustId("apiInviteBulk.eventId", eventId)}/invite_bulk/`, {
+    return httpResto(`/evenements/${mustId("apiInviteBulk.eventId", eventId)}/invite_bulk/`, {
         method: "POST",
         body: { emails },
     });
@@ -410,14 +383,13 @@ export function apiInviteBulk(eventId, emails = []) {
 export const apiSendInvitesBulk = apiInviteBulk;
 
 export function apiGetEvent(eventId) {
-    return http(`/evenements/${mustId("apiGetEvent.eventId", eventId)}/`, { method: "GET" });
+    return httpResto(`/evenements/${mustId("apiGetEvent.eventId", eventId)}/`, { method: "GET" });
 }
 
 // ======================================================================
 //                        ACCOUNTS — recherche clients
 // ======================================================================
 export async function apiSearchClients(search = "", limit = 50) {
-    // Essaie plusieurs endpoints potentiels (selon ton app "accounts")
     const urls = [
         `${ACCOUNTS_ROOT}/users/`,
         `${ACCOUNTS_ROOT}/clients/`,
@@ -439,7 +411,7 @@ export async function apiSearchClients(search = "", limit = 50) {
                 }))
                 .filter((u) => u.id && u.email);
 
-            return users; // OK (même vide)
+            return users;
         } catch (e) {
             if (DEBUG) console.warn("[apiSearchClients] fallback failed for", base, e?.status || e);
         }
@@ -447,5 +419,110 @@ export async function apiSearchClients(search = "", limit = 50) {
     return [];
 }
 
+// ======================================================================
+//                               MARKET (offers)
+// ======================================================================
+export function apiListOffers(params = {}) {
+    // filtres supportés: q, is_bio, region, allergen, exclude_allergens, available_on, sort (price | -price)
+    return httpMarket(`/offers/`, { method: "GET", params });
+}
+
+export function apiGetOffer(offerId) {
+    return httpMarket(`/offers/${mustId("apiGetOffer.offerId", offerId)}/`, { method: "GET" });
+}
+
+export function apiPublishOffer(offerId) {
+    return httpMarket(`/offers/${mustId("apiPublishOffer.offerId", offerId)}/publish/`, { method: "POST" });
+}
+export function apiUnlistOffer(offerId) {
+    return httpMarket(`/offers/${mustId("apiUnlistOffer.offerId", offerId)}/unlist/`, { method: "POST" });
+}
+export function apiDraftOffer(offerId) {
+    return httpMarket(`/offers/${mustId("apiDraftOffer.offerId", offerId)}/draft/`, { method: "POST" });
+}
+
+export function apiCompareOffers(ids = []) {
+    const p = { ids: ids.filter(Boolean).join(",") };
+    return httpMarket(`/offers/compare/`, { method: "GET", params: p });
+}
+
+export function apiImportOfferToProduct(offerId) {
+    // réservé RESTAURATEUR (backend)
+    return httpMarket(`/offers/${mustId("apiImportOfferToProduct.offerId", offerId)}/import_to_product/`, { method: "POST" });
+}
+
+export function apiFlagOffer(offerId, { reason, details = "" }) {
+    return httpMarket(`/offers/${mustId("apiFlagOffer.offerId", offerId)}/flag/`, { method: "POST", body: { reason, details } });
+}
+
+// Reviews (restaurateur/admin peuvent créer)
+export function apiCreateOfferReview({ offer, rating, comment = "" }) {
+    const body = { offer: mustId("apiCreateOfferReview.offer", offer), rating, comment };
+    return httpMarket(`/reviews/`, { method: "POST", body });
+}
+export function apiListOfferReviews(offerId) {
+    // pas d’endpoint list dédié montré; on récupère via GET offer (avg_rating) + (option) autre endpoint si exposé
+    // Ici on re-emploie comments pour affichage communautaire; reviews sont souvent agrégées.
+    return httpMarket(`/reviews/`, { method: "GET", params: { offer: mustId("apiListOfferReviews.offerId", offerId) } });
+}
+
+// Comments (publics par défaut; admin voit tout)
+export function apiListOfferComments(offerId) {
+    return httpMarket(`/comments/`, { method: "GET", params: { offer: mustId("apiListOfferComments.offerId", offerId) } });
+}
+export function apiCreateOfferComment({ offer, content, is_public = true }) {
+    const body = { offer: mustId("apiCreateOfferComment.offer", offer), content, is_public };
+    return httpMarket(`/comments/`, { method: "POST", body });
+}
+export function apiUpdateOfferComment(commentId, patch) {
+    return httpMarket(`/comments/${mustId("apiUpdateOfferComment.commentId", commentId)}/`, { method: "PATCH", body: patch });
+}
+export function apiDeleteOfferComment(commentId) {
+    return httpMarket(`/comments/${mustId("apiDeleteOfferComment.commentId", commentId)}/`, { method: "DELETE" });
+}
+
+// ======================================================================
+//                             PURCHASING (orders)
+// ======================================================================
+export function apiCreateSupplierOrder({ supplier, note = "", items = [] }) {
+    // items: [{offer: id, qty_requested: number}, ...] (tous du même supplier)
+    const body = {
+        supplier: mustId("apiCreateSupplierOrder.supplier", supplier),
+        note,
+        items: items.map((it) => ({
+            offer: mustId("apiCreateSupplierOrder.item.offer", it.offer),
+            qty_requested: it.qty_requested,
+        })),
+    };
+    return httpPurch(`/orders/`, { method: "POST", body });
+}
+
+export function apiMyRestaurantOrders() {
+    return httpPurch(`/orders/my_restaurant_orders/`, { method: "GET" });
+}
+
+export function apiSupplierInbox() {
+    return httpPurch(`/orders/supplier_inbox/`, { method: "GET" });
+}
+
+export function apiSupplierReview(orderId, items) {
+    // items: [{id, qty_confirmed}, ...]
+    return httpPurch(`/orders/${mustId("apiSupplierReview.orderId", orderId)}/supplier_review/`, {
+        method: "POST",
+        body: { items },
+    });
+}
+
 // ---------- Exports utilitaires ----------
-export const __debug = { API, ROOT, ACCOUNTS_ROOT, getToken, toId, mustId, sanitizeQuery, buildQS };
+export const __debug = {
+    API,
+    RESTAURANTS_ROOT,
+    MARKET_ROOT,
+    PURCHASING_ROOT,
+    ACCOUNTS_ROOT,
+    getToken,
+    toId,
+    mustId,
+    sanitizeQuery,
+    buildQS,
+};
