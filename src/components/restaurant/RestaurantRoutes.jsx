@@ -15,7 +15,6 @@ import Rooms from "./pages/settings/Rooms";
 import Hours from "./pages/settings/Hours";
 import Closures from "./pages/settings/Closures";
 
-// ✅ nouvelles pages fournisseurs
 import MarketList from "./pages/market/MarketList";
 import MyOrders from "./pages/purchasing/MyOrders";
 
