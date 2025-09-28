@@ -318,6 +318,20 @@ export function apiDeleteReservation(reservationId) {
     });
 }
 
+export function apiAssignReservation(reservationId, payload = {}) {
+    // payload attendu :
+    // - { full_restaurant: true }  OU
+    // - { room: <id> }
+    const body = {};
+    if (payload.full_restaurant) body.full_restaurant = true;
+    if (payload.room) body.room = toId(payload.room);
+
+    return httpResto(
+        `/reservations/${mustId("apiAssignReservation.reservationId", reservationId)}/assign/`,
+        { method: "POST", body }
+    );
+}
+
 // ======================================================================
 //                                 EVENTS
 // ======================================================================
@@ -461,8 +475,6 @@ export function apiCreateOfferReview({ offer, rating, comment = "" }) {
     return httpMarket(`/reviews/`, { method: "POST", body });
 }
 export function apiListOfferReviews(offerId) {
-    // pas d’endpoint list dédié montré; on récupère via GET offer (avg_rating) + (option) autre endpoint si exposé
-    // Ici on re-emploie comments pour affichage communautaire; reviews sont souvent agrégées.
     return httpMarket(`/reviews/`, { method: "GET", params: { offer: mustId("apiListOfferReviews.offerId", offerId) } });
 }
 
