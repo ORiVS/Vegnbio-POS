@@ -1,5 +1,4 @@
-// src/components/restaurant/pages/market/OfferDetail.jsx
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
     apiGetOffer,
@@ -86,7 +85,6 @@ export default function OfferDetail(){
             .then(([o,coms])=>{
                 setOffer(o || null);
                 setComments(Array.isArray(coms)? coms: (Array.isArray(coms?.results)? coms.results: []));
-                // init qty par défaut = min_order_qty
                 if(o?.min_order_qty && !qty) setQty(String(o.min_order_qty));
             })
             .catch(e=> setErr(e))
@@ -144,16 +142,20 @@ export default function OfferDetail(){
         }catch(e){ setErr(e); }
     };
 
+    // ⚠️ Sans changer le back, l’API n’expose pas le supplier.
+    // On tente offer.supplier_id puis offer.supplier (au cas où), sinon on désactive la commande.
+    const supplierId = useMemo(()=> offer?.supplier_id ?? offer?.supplier ?? null, [offer]);
+    const canOrder = Boolean(supplierId);
+
     const onOrder = async (e)=>{
         e.preventDefault(); setErr(null); setInfo("");
         try{
             if(!offer) return;
+            if(!canOrder){ setErr("Commande indisponible: fournisseur non exposé par l’API."); return; }
             const q = Number(qty);
             if(!Number.isFinite(q) || q <= 0) { setErr("Quantité demandée invalide."); return; }
             if(q < Number(offer.min_order_qty || 0)) { setErr(`Quantité minimale: ${offer.min_order_qty}.`); return; }
 
-            // une commande = un supplier
-            const supplierId = offer.supplier;
             await apiCreateSupplierOrder({
                 supplier: supplierId,
                 note: note || "",
@@ -161,7 +163,6 @@ export default function OfferDetail(){
             });
             setInfo("Commande créée et envoyée au producteur.");
             setNote("");
-            // ne pas reset qty (utile pour re-commander)
         }catch(e){ setErr(e); }
     };
 
@@ -176,10 +177,17 @@ export default function OfferDetail(){
             {info && <div className="p-2 bg-emerald-600/10 text-emerald-400 rounded">{info}</div>}
             {loading && <Loading/>}
 
+            {/* Fallback lisible au lieu d’un écran vide */}
+            {!loading && !err && !offer && (
+                <div className="p-3 opacity-60">Offre introuvable.</div>
+            )}
+
             {offer && (
                 <div className="bg-white text-black border rounded-2xl p-4 space-y-4">
                     <div className="text-xl font-medium">{offer.product_name}</div>
-                    <div className="text-sm opacity-70">Producteur: {offer.producer_name || "—"} • Région: {offer.region} • Unité: {offer.unit}</div>
+                    <div className="text-sm opacity-70">
+                        Producteur: {offer.producer_name || "—"} • Région: {offer.region} • Unité: {offer.unit}
+                    </div>
 
                     <div className="text-sm">Prix: <b>{Number(offer.price).toFixed(2)} €</b></div>
                     <div className="text-sm">Min. commande: <b>{offer.min_order_qty}</b> • Stock: <b>{offer.stock_qty}</b></div>
@@ -200,22 +208,46 @@ export default function OfferDetail(){
                     {/* Commander */}
                     <section className="border rounded-xl p-3">
                         <h3 className="font-medium mb-2">Commander</h3>
+
+                        {!canOrder && (
+                            <div className="p-2 bg-amber-500/10 text-amber-700 rounded text-sm mb-2">
+                                Le back-end n’expose pas l’identifiant du fournisseur sur l’offre.
+                                La création de commande est désactivée côté front tant que ce champ n’est pas renvoyé.
+                            </div>
+                        )}
+
                         <form onSubmit={onOrder} className="grid md:grid-cols-3 gap-3">
                             <label className="text-sm">
                                 <div className="opacity-70 mb-1">Quantité</div>
-                                <input type="number" step="0.01" min={offer.min_order_qty || 0.01}
-                                       className="border rounded px-2 py-1 w-full"
-                                       value={qty} onChange={(e)=> setQty(e.target.value)} />
+                                <input
+                                    type="number"
+                                    step="0.01"
+                                    min={offer.min_order_qty || 0.01}
+                                    className="border rounded px-2 py-1 w-full"
+                                    value={qty}
+                                    onChange={(e)=> setQty(e.target.value)}
+                                    disabled={!canOrder}
+                                />
                                 <div className="text-xs opacity-70 mt-1">Min: {offer.min_order_qty} • Stock: {offer.stock_qty}</div>
                             </label>
 
                             <label className="text-sm md:col-span-2">
                                 <div className="opacity-70 mb-1">Note (optionnel)</div>
-                                <input className="border rounded px-2 py-1 w-full" value={note} onChange={(e)=> setNote(e.target.value)} />
+                                <input
+                                    className="border rounded px-2 py-1 w-full"
+                                    value={note}
+                                    onChange={(e)=> setNote(e.target.value)}
+                                    disabled={!canOrder}
+                                />
                             </label>
 
                             <div className="md:col-span-3">
-                                <button className="px-3 py-2 rounded bg-emerald-600 hover:bg-emerald-500">Envoyer la commande</button>
+                                <button
+                                    className="px-3 py-2 rounded bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60"
+                                    disabled={!canOrder}
+                                >
+                                    Envoyer la commande
+                                </button>
                             </div>
                         </form>
                     </section>

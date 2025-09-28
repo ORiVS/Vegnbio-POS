@@ -1,10 +1,6 @@
-// src/components/restaurant/pages/market/OffersList.jsx
 import { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import {
-    apiListOffers,
-    apiCompareOffers,
-} from "../../api";
+import { Link } from "react-router-dom";
+import { apiListOffers, apiCompareOffers } from "../../api";
 
 function Loading(){return <div className="p-4 text-sm opacity-70">Chargement…</div>;}
 function Empty({children}){return <div className="p-3 opacity-60">{children}</div>;}
@@ -53,14 +49,14 @@ function ErrorMsg({error,onClose}){
 export default function OffersList(){
     const [q,setQ] = useState("");
     const [availableOn,setAvailableOn]=useState("");
-    const [allergen,setAllergen] = useState("");           // codes CSV à inclure
-    const [excludeAllergens,setExcludeAllergens] = useState(""); // codes CSV à exclure
-    const [sort,setSort] = useState(""); // "" | "price" | "-price"
+    const [allergen,setAllergen] = useState("");
+    const [excludeAllergens,setExcludeAllergens] = useState("");
+    const [sort,setSort] = useState("");
 
     const params = useMemo(()=> {
         const p = {};
         if(q) p.q = q;
-        p.is_bio = "true"; // exigence back (toutes nos offres sont bio)
+        p.is_bio = "true"; // tout est bio côté back
         if(availableOn) p.available_on = availableOn;
         if(allergen) p.allergen = allergen;
         if(excludeAllergens) p.exclude_allergens = excludeAllergens;

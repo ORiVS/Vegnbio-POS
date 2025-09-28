@@ -1,4 +1,3 @@
-// src/components/restaurant/RestaurantRoutes.jsx
 import { Routes, Route, Navigate } from "react-router-dom";
 
 import Dashboard from "./pages/Dashboard";
@@ -15,7 +14,11 @@ import Rooms from "./pages/settings/Rooms";
 import Hours from "./pages/settings/Hours";
 import Closures from "./pages/settings/Closures";
 
-import MarketList from "./pages/market/MarketList";
+// ⬇️ Utiliser la vraie liste + le détail du Market
+import OffersList from "./pages/market/OffersList";
+import OfferDetail from "./pages/market/OfferDetail";
+
+// Historique des commandes (purchasing)
 import MyOrders from "./pages/purchasing/MyOrders";
 
 export default function RestaurantRoutes() {
@@ -39,8 +42,11 @@ export default function RestaurantRoutes() {
                     <Route path="settings/hours" element={<Hours />} />
                     <Route path="settings/closures" element={<Closures />} />
 
-                    {/* ✅ Fournisseurs */}
-                    <Route path="market" element={<MarketList />} />
+                    {/* ✅ Market (liste + détail) */}
+                    <Route path="market" element={<OffersList />} />
+                    <Route path="market/offers/:id" element={<OfferDetail />} />
+
+                    {/* ✅ Purchasing */}
                     <Route path="purchasing/orders" element={<MyOrders />} />
 
                     <Route path="*" element={<Navigate to="dashboard" replace />} />
