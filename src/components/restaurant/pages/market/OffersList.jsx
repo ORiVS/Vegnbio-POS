@@ -56,7 +56,7 @@ export default function OffersList(){
     const params = useMemo(()=> {
         const p = {};
         if(q) p.q = q;
-        p.is_bio = "true"; // tout est bio côté back
+        p.is_bio = "true";
         if(availableOn) p.available_on = availableOn;
         if(allergen) p.allergen = allergen;
         if(excludeAllergens) p.exclude_allergens = excludeAllergens;
@@ -85,7 +85,7 @@ export default function OffersList(){
         setCompareSel(prev=>{
             const exists = prev.includes(id);
             if(exists) return prev.filter(x=>x!==id);
-            if(prev.length>=4) return prev; // max 4
+            if(prev.length>=4) return prev;
             return [...prev, id];
         });
     };
@@ -223,7 +223,21 @@ export default function OffersList(){
                                         Comparer
                                     </label>
                                 </div>
-                                <div className="text-xs opacity-70 mb-2">#{o.id} • {o.region} • {o.unit}</div>
+
+                                <div className="text-xs opacity-70 mb-2">
+                                    #{o.id} • {o.region} • {o.unit}
+                                </div>
+
+                                {/* ↘️ Affiche la fenêtre de disponibilité si dispo */}
+                                {(o.available_from || o.available_to) && (
+                                    <div className="text-xs opacity-70 mb-2">
+                                        Dispo&nbsp;
+                                        {o.available_from ? `du ${o.available_from}` : "dès maintenant"}
+                                        {" "}
+                                        {o.available_to ? `au ${o.available_to}` : ""}
+                                    </div>
+                                )}
+
                                 <div className="text-sm mb-2 line-clamp-2">{o.description || "—"}</div>
                                 <div className="text-sm">Prix: <b>{Number(o.price).toFixed(2)} €</b></div>
                                 <div className="text-sm">Min.: <b>{o.min_order_qty}</b> • Stock: <b>{o.stock_qty}</b></div>

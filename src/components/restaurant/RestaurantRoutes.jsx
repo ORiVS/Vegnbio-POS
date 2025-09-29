@@ -14,11 +14,11 @@ import Rooms from "./pages/settings/Rooms";
 import Hours from "./pages/settings/Hours";
 import Closures from "./pages/settings/Closures";
 
-// ⬇️ Utiliser la vraie liste + le détail du Market
+// ✅ Marketplace + détail
 import OffersList from "./pages/market/OffersList";
 import OfferDetail from "./pages/market/OfferDetail";
 
-// Historique des commandes (purchasing)
+// Achats
 import MyOrders from "./pages/purchasing/MyOrders";
 
 export default function RestaurantRoutes() {
@@ -42,11 +42,11 @@ export default function RestaurantRoutes() {
                     <Route path="settings/hours" element={<Hours />} />
                     <Route path="settings/closures" element={<Closures />} />
 
-                    {/* ✅ Market (liste + détail) */}
+                    {/* ✅ Marketplace */}
                     <Route path="market" element={<OffersList />} />
                     <Route path="market/offers/:id" element={<OfferDetail />} />
 
-                    {/* ✅ Purchasing */}
+                    {/* Achats */}
                     <Route path="purchasing/orders" element={<MyOrders />} />
 
                     <Route path="*" element={<Navigate to="dashboard" replace />} />
