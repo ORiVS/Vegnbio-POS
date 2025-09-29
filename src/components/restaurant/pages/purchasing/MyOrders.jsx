@@ -1,4 +1,4 @@
-// src/components/restaurant/pages/purchasing/PurchasingOrders.jsx
+// src/components/restaurant/pages/purchasing/MyOrders.jsx
 import { useEffect, useState } from "react";
 import { apiMyRestaurantOrders } from "../../api";
 
@@ -46,7 +46,22 @@ function ErrorBanner({error, onClose}){
     );
 }
 
-export default function PurchasingOrders(){
+function badgeCls(s){
+    switch(s){
+        case "CONFIRMED": return "bg-emerald-600/10 text-emerald-600";
+        case "PARTIALLY_CONFIRMED": return "bg-amber-600/10 text-amber-600";
+        case "REJECTED": return "bg-rose-600/10 text-rose-600";
+        default: return "bg-slate-600/10 text-slate-600";
+    }
+}
+
+function euro(n){
+    const x = Number(n);
+    if(!Number.isFinite(x)) return "—";
+    return `${x.toFixed(2)} €`;
+}
+
+export default function MyOrders(){
     const [rows,setRows]=useState([]);
     const [loading,setLoading]=useState(false);
     const [err,setErr]=useState(null);
@@ -61,6 +76,16 @@ export default function PurchasingOrders(){
 
     useEffect(()=>{ load(); },[]);
 
+    // totaux utilitaires
+    const totalRequested = (o)=>{
+        if(!o?.items?.length) return 0;
+        return o.items.reduce((s,it)=> s + (Number(it.unit_price)||0) * (Number(it.qty_requested)||0), 0);
+    };
+    const totalConfirmed = (o)=>{
+        if(!o?.items?.length) return 0;
+        return o.items.reduce((s,it)=> s + (Number(it.unit_price)||0) * (Number(it.qty_confirmed)||0), 0);
+    };
+
     return (
         <div className="p-6 space-y-4">
             <div className="flex items-center justify-between">
@@ -73,78 +98,64 @@ export default function PurchasingOrders(){
 
             {!loading && !err && (
                 rows.length ? (
-                    <div className="bg-white text-black border rounded-2xl overflow-hidden">
-                        <table className="w-full text-sm">
-                            <thead className="bg-gray-100">
-                            <tr className="text-left">
-                                <th className="py-2 px-3">#</th>
-                                <th>Fournisseur</th>
-                                <th>Statut</th>
-                                <th>Créée le</th>
-                                <th>Confirmée le</th>
-                                <th>Note</th>
-                            </tr>
-                            </thead>
-                            <tbody>
-                            {rows.map(o=>(
-                                <tr key={o.id} className="border-t align-top">
-                                    <td className="py-2 px-3">
-                                        <div className="font-medium">#{o.id}</div>
-                                    </td>
-                                    <td>#{o.supplier}</td>
-                                    <td>{o.status}</td>
-                                    <td>{o.created_at ? new Date(o.created_at).toLocaleString() : "—"}</td>
-                                    <td>{o.confirmed_at ? new Date(o.confirmed_at).toLocaleString() : "—"}</td>
-                                    <td className="max-w-[280px]">{o.note || "—"}</td>
-                                </tr>
-                            ))}
-                            </tbody>
-                        </table>
-
-                        {/* Détail items */}
-                        <div className="p-4 border-t space-y-4">
-                            {rows.map(o=>(
-                                <div key={o.id} className="rounded-xl border">
-                                    <div className="px-3 py-2 bg-gray-50 text-sm font-medium">
-                                        Items de la commande #{o.id}
+                    <div className="space-y-4">
+                        {rows.map(o=>(
+                            <div key={o.id} className="bg-white text-black border rounded-2xl overflow-hidden">
+                                {/* Entête commande */}
+                                <div className="p-4 flex items-start justify-between gap-4">
+                                    <div>
+                                        <div className="text-lg font-medium">Commande #{o.id}</div>
+                                        <div className="text-xs opacity-70">
+                                            Créée le {o.created_at ? new Date(o.created_at).toLocaleString() : "—"}
+                                            {o.confirmed_at ? <> • Confirmée le <b>{new Date(o.confirmed_at).toLocaleString()}</b></> : null}
+                                        </div>
+                                        <div className="text-xs opacity-70">Fournisseur: #{o.supplier}</div>
                                     </div>
-                                    <div className="p-3 overflow-x-auto">
-                                        {o.items?.length ? (
-                                            <table className="w-full text-sm">
-                                                <thead>
-                                                <tr className="text-left border-b">
-                                                    <th className="py-2">Offre</th>
-                                                    <th>Produit</th>
-                                                    <th>Unité</th>
-                                                    <th>Demandé</th>
-                                                    <th>Confirmé</th>
-                                                    <th>Prix unitaire</th>
-                                                    <th>Total demandé</th>
-                                                </tr>
-                                                </thead>
-                                                <tbody>
-                                                {o.items.map(it=>(
-                                                    <tr key={it.id} className="border-b last:border-0">
-                                                        <td>#{it.offer}</td>
-                                                        <td>{it.product_name}</td>
-                                                        <td>{it.unit}</td>
-                                                        <td>{it.qty_requested}</td>
-                                                        <td>{it.qty_confirmed ?? "—"}</td>
-                                                        <td>{it.unit_price != null ? `${it.unit_price} €` : "—"}</td>
-                                                        <td>
-                                                            {it.unit_price != null && it.qty_requested != null
-                                                                ? `${Number(it.unit_price) * Number(it.qty_requested)} €`
-                                                                : "—"}
-                                                        </td>
-                                                    </tr>
-                                                ))}
-                                                </tbody>
-                                            </table>
-                                        ) : <div className="text-sm opacity-70 p-2">Aucun item.</div>}
-                                    </div>
+                                    <div className={`px-2 py-1 rounded text-xs h-min ${badgeCls(o.status)}`}>{o.status}</div>
                                 </div>
-                            ))}
-                        </div>
+
+                                {/* Items */}
+                                <div className="px-4 pb-4 overflow-x-auto">
+                                    {o.items?.length ? (
+                                        <table className="w-full text-sm min-w-[800px]">
+                                            <thead className="bg-gray-100">
+                                            <tr className="text-left">
+                                                <th className="py-2 px-3">Offre</th>
+                                                <th>Produit</th>
+                                                <th>Unité</th>
+                                                <th>Demandé</th>
+                                                <th>Confirmé</th>
+                                                <th>PU</th>
+                                                <th>Total demandé</th>
+                                                <th>Total confirmé</th>
+                                            </tr>
+                                            </thead>
+                                            <tbody>
+                                            {o.items.map(it=>(
+                                                <tr key={it.id} className="border-t align-top">
+                                                    <td className="py-2 px-3">#{it.offer}</td>
+                                                    <td>{it.product_name}</td>
+                                                    <td>{it.unit}</td>
+                                                    <td>{it.qty_requested}</td>
+                                                    <td>{it.qty_confirmed ?? "—"}</td>
+                                                    <td>{euro(it.unit_price)}</td>
+                                                    <td>{euro((Number(it.unit_price)||0) * (Number(it.qty_requested)||0))}</td>
+                                                    <td>{it.qty_confirmed == null ? "—" : euro((Number(it.unit_price)||0) * (Number(it.qty_confirmed)||0))}</td>
+                                                </tr>
+                                            ))}
+                                            </tbody>
+                                            <tfoot>
+                                            <tr className="border-t font-medium">
+                                                <td className="py-2 px-3" colSpan={6}>Totaux</td>
+                                                <td>{euro(totalRequested(o))}</td>
+                                                <td>{o.status==="CONFIRMED"||o.status==="PARTIALLY_CONFIRMED" ? euro(totalConfirmed(o)) : "—"}</td>
+                                            </tr>
+                                            </tfoot>
+                                        </table>
+                                    ) : <div className="text-sm opacity-70 p-2">Aucun item.</div>}
+                                </div>
+                            </div>
+                        ))}
                     </div>
                 ) : <Empty>Aucune commande.</Empty>
             )}

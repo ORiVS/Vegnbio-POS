@@ -1,3 +1,4 @@
+// src/components/restaurant/pages/market/OfferDetail.jsx
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
@@ -76,6 +77,9 @@ export default function OfferDetail(){
     const [qty,setQty] = useState("");
     const [note,setNote] = useState("");
 
+    // modal
+    const [confirmOpen, setConfirmOpen] = useState(false);
+
     const load = ()=>{
         setLoading(true); setErr(null); setInfo("");
         Promise.all([
@@ -142,34 +146,40 @@ export default function OfferDetail(){
         }catch(e){ setErr(e); }
     };
 
-    const onOrder = async (e)=>{
-        e.preventDefault(); setErr(null); setInfo("");
+    // ouverture de la modale
+    const openConfirm = (e)=>{
+        e?.preventDefault?.();
+        setErr(null); setInfo("");
+        // contrôles de base avant d'ouvrir
+        if(!offer) return;
+        const q = Number(qty);
+        if(!Number.isFinite(q) || q <= 0) { setErr("Quantité demandée invalide."); return; }
+        if(q < Number(offer.min_order_qty || 0)) { setErr(`Quantité minimale: ${offer.min_order_qty}.`); return; }
+        setConfirmOpen(true);
+    };
+
+    // confirmation finale
+    const confirmOrder = async ()=>{
         try{
-            if(!offer) return;
             const q = Number(qty);
-            if(!Number.isFinite(q) || q <= 0) { setErr("Quantité demandée invalide."); return; }
-            if(q < Number(offer.min_order_qty || 0)) { setErr(`Quantité minimale: ${offer.min_order_qty}.`); return; }
-
-            // ⬇️ utiliser l'id du fournisseur exposé par l'API
-            const supplierId = offer.supplier ?? offer.supplier_id;
-            if(!supplierId){ setErr("Fournisseur introuvable pour cette offre."); return; }
-
+            const supplierId = offer.supplier_id || offer.supplier; // selon le serializer
             await apiCreateSupplierOrder({
                 supplier: supplierId,
                 note: note || "",
                 items: [{ offer: offer.id, qty_requested: q }],
             });
+            setConfirmOpen(false);
             setInfo("Commande créée et envoyée au producteur.");
             setNote("");
-        }catch(e){ setErr(e); }
+        }catch(e){ setErr(e); setConfirmOpen(false); }
     };
 
-    const period = (from, to) => {
-        if(!from && !to) return null;
-        if(from && to) return `Disponible du ${from} au ${to}`;
-        if(from && !to) return `Disponible à partir du ${from}`;
-        if(!from && to) return `Disponible jusqu’au ${to}`;
-        return null;
+    const totalPrice = ()=>{
+        if(!offer) return null;
+        const q = Number(qty||0);
+        const p = Number(offer.price||0);
+        if(!Number.isFinite(q) || !Number.isFinite(p)) return null;
+        return (q*p).toFixed(2);
     };
 
     return (
@@ -190,37 +200,40 @@ export default function OfferDetail(){
                         Producteur: {offer.producer_name || "—"} • Région: {offer.region} • Unité: {offer.unit}
                     </div>
 
-                    <div className="text-sm">
-                        Disponibilité :
-                        {" "}
-                        <b>
-                            {offer.available_from ? new Date(offer.available_from).toLocaleDateString() : "—"}
-                            {" "}→{" "}
-                            {offer.available_to ? new Date(offer.available_to).toLocaleDateString() : "—"}
-                        </b>
-                    </div>
-
                     <div className="text-sm">Prix: <b>{Number(offer.price).toFixed(2)} €</b></div>
-                    <div className="text-sm">Min. commande: <b>{offer.min_order_qty}</b> •
-                        Stock: <b>{offer.stock_qty}</b></div>
+                    <div className="text-sm">
+                        Min. commande: <b>{offer.min_order_qty}</b> • Stock: <b>{offer.stock_qty}</b>
+                    </div>
+                    <div className="text-sm">
+                        Disponibilité: <b>{offer.available_from || "—"}</b> → <b>{offer.available_to || "—"}</b>
+                    </div>
                     <div className="text-sm">Note moyenne: <b>{offer.avg_rating ?? "—"}</b></div>
 
                     {offer.description && (
                         <div className="mt-2 text-sm whitespace-pre-wrap">{offer.description}</div>
                     )}
 
-
+                    {/* Actions */}
+                    <div className="flex flex-wrap gap-2">
+                        <button className="px-3 py-2 rounded bg-blue-600 hover:bg-blue-500" onClick={onFlag}>Signaler</button>
+                        <button className="px-3 py-2 rounded bg-slate-700 hover:bg-slate-600" onClick={onImportProduct}>
+                            Importer en produit (menu)
+                        </button>
+                    </div>
 
                     {/* Commander */}
                     <section className="border rounded-xl p-3">
                         <h3 className="font-medium mb-2">Commander</h3>
-                        <form onSubmit={onOrder} className="grid md:grid-cols-3 gap-3">
+                        <form onSubmit={openConfirm} className="grid md:grid-cols-3 gap-3">
                             <label className="text-sm">
                                 <div className="opacity-70 mb-1">Quantité</div>
                                 <input
-                                    type="number" step="0.01" min={offer.min_order_qty || 0.01}
+                                    type="number"
+                                    step="0.01"
+                                    min={offer.min_order_qty || 0.01}
                                     className="border rounded px-2 py-1 w-full"
-                                    value={qty} onChange={(e) => setQty(e.target.value)}
+                                    value={qty}
+                                    onChange={(e)=> setQty(e.target.value)}
                                 />
                                 <div className="text-xs opacity-70 mt-1">
                                     Min: {offer.min_order_qty} • Stock: {offer.stock_qty}
@@ -231,40 +244,59 @@ export default function OfferDetail(){
                                 <div className="opacity-70 mb-1">Note (optionnel)</div>
                                 <input
                                     className="border rounded px-2 py-1 w-full"
-                                    value={note} onChange={(e) => setNote(e.target.value)}
+                                    value={note}
+                                    onChange={(e)=> setNote(e.target.value)}
                                 />
                             </label>
 
                             <div className="md:col-span-3">
-                                <button className="px-3 py-2 rounded bg-emerald-600 hover:bg-emerald-500">Envoyer la
-                                    commande
+                                <button className="px-3 py-2 rounded bg-emerald-600 hover:bg-emerald-500">
+                                    Commander
                                 </button>
                             </div>
                         </form>
+
+                        {/* MODALE DE CONFIRMATION */}
+                        {confirmOpen && (
+                            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+                                <div className="bg-white text-black rounded-2xl p-5 w-full max-w-md shadow-xl">
+                                    <div className="text-lg font-semibold mb-2">Confirmer la commande ?</div>
+                                    <div className="text-sm space-y-1 mb-3">
+                                        <div>Produit : <b>{offer.product_name}</b></div>
+                                        <div>Fournisseur : <b>#{offer.supplier_id || offer.supplier}</b></div>
+                                        <div>Prix unitaire : <b>{Number(offer.price).toFixed(2)} €</b></div>
+                                        <div>Quantité : <b>{qty}</b> {offer.unit}</div>
+                                        <div>Montant estimé : <b>{totalPrice()} €</b></div>
+                                        {note ? <div>Note : “{note}”</div> : null}
+                                    </div>
+                                    <div className="flex justify-end gap-2">
+                                        <button className="px-3 py-2 rounded border" onClick={()=> setConfirmOpen(false)}>Annuler</button>
+                                        <button className="px-3 py-2 rounded bg-emerald-600 hover:bg-emerald-500" onClick={confirmOrder}>
+                                            Oui, confirmer
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
                     </section>
 
-                    {/* Avis (review) */}
+                    {/* Avis */}
                     <section className="border rounded-xl p-3">
                         <h3 className="font-medium mb-2">Laisser un avis</h3>
                         <form onSubmit={onSendReview} className="grid md:grid-cols-3 gap-3">
                             <label className="text-sm">
                                 <div className="opacity-70 mb-1">Note (1–5)</div>
-                                <input
-                                    type="number" min={1} max={5}
-                                    className="border rounded px-2 py-1 w-full"
-                                    value={rating} onChange={(e) => setRating(e.target.value)}
-                                />
+                                <input type="number" min={1} max={5}
+                                       className="border rounded px-2 py-1 w-full"
+                                       value={rating} onChange={(e)=> setRating(e.target.value)} />
                             </label>
                             <label className="text-sm md:col-span-2">
                                 <div className="opacity-70 mb-1">Commentaire (optionnel)</div>
-                                <input
-                                    className="border rounded px-2 py-1 w-full"
-                                    value={reviewComment} onChange={(e) => setReviewComment(e.target.value)}
-                                />
+                                <input className="border rounded px-2 py-1 w-full"
+                                       value={reviewComment} onChange={(e)=> setReviewComment(e.target.value)} />
                             </label>
                             <div className="md:col-span-3">
-                                <button className="px-3 py-2 rounded bg-sky-600 hover:bg-sky-500">Publier l’avis
-                                </button>
+                                <button className="px-3 py-2 rounded bg-sky-600 hover:bg-sky-500">Publier l’avis</button>
                             </div>
                         </form>
                     </section>
@@ -274,19 +306,15 @@ export default function OfferDetail(){
                         <h3 className="font-medium mb-2">Commentaires</h3>
                         {comments?.length ? (
                             <ul className="space-y-2">
-                                {comments.map(c => (
+                                {comments.map(c=>(
                                     <li key={c.id} className="border rounded p-2">
                                         <div className="text-xs opacity-70 mb-1">
                                             #{c.id} • {new Date(c.created_at).toLocaleString()}
                                         </div>
                                         <div className="text-sm whitespace-pre-wrap">{c.content}</div>
                                         <div className="mt-1">
-                                            <button
-                                                className="text-xs underline opacity-70 hover:opacity-100"
-                                                onClick={() => onDeleteComment(c.id)}
-                                            >
-                                                supprimer (si auteur/admin)
-                                            </button>
+                                            <button className="text-xs underline opacity-70 hover:opacity-100"
+                                                    onClick={()=> onDeleteComment(c.id)}>supprimer (si auteur/admin)</button>
                                         </div>
                                     </li>
                                 ))}
@@ -296,14 +324,11 @@ export default function OfferDetail(){
                         <form onSubmit={onAddComment} className="mt-3 grid md:grid-cols-6 gap-3">
                             <label className="text-sm md:col-span-5">
                                 <div className="opacity-70 mb-1">Nouveau commentaire</div>
-                                <input
-                                    className="border rounded px-2 py-1 w-full"
-                                    value={newComment} onChange={(e) => setNewComment(e.target.value)}
-                                />
+                                <input className="border rounded px-2 py-1 w-full"
+                                       value={newComment} onChange={(e)=> setNewComment(e.target.value)} />
                             </label>
                             <div className="md:col-span-1 flex items-end">
-                                <button className="px-3 py-2 rounded bg-slate-800 hover:bg-slate-700 w-full">Ajouter
-                                </button>
+                                <button className="px-3 py-2 rounded bg-slate-800 hover:bg-slate-700 w-full">Ajouter</button>
                             </div>
                         </form>
                     </section>
