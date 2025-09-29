@@ -224,22 +224,22 @@ const httpPurch  = (p, opts) => httpRoot(PURCHASING_ROOT, p, opts);
 // ======================================================================
 export function apiGetRestaurant(restaurantId) {
     const rid = mustId("apiGetRestaurant.restaurantId", restaurantId);
-    return httpResto(`/restaurants/${rid}/`, { method: "GET" });
+    return httpResto(`/${rid}/`, { method: "GET" });
 }
 
 export function apiUpdateRestaurant(restaurantId, payload) {
     const rid = mustId("apiUpdateRestaurant.restaurantId", restaurantId);
-    return httpResto(`/restaurants/${rid}/`, { method: "PATCH", body: payload });
+    return httpResto(`/${rid}/`, { method: "PATCH", body: payload });
 }
 
 export function apiGetAvailability(restaurantId, dateISO) {
     const rid = mustId("apiGetAvailability.restaurantId", restaurantId);
-    return httpResto(`/restaurants/${rid}/dashboard/`, { method: "GET", params: { date: dateISO } });
+    return httpResto(`/${rid}/dashboard/`, { method: "GET", params: { date: dateISO } });
 }
 
 export function apiGetRestaurantReservations(restaurantId, { status } = {}) {
     const rid = mustId("apiGetRestaurantReservations.restaurantId", restaurantId);
-    return httpResto(`/restaurants/${rid}/reservations/`, { method: "GET", params: { status } });
+    return httpResto(`/${rid}/reservations/`, { method: "GET", params: { status } });
 }
 
 export function apiStatsReservations() {
@@ -247,8 +247,9 @@ export function apiStatsReservations() {
 }
 
 export function apiListRestaurants(params = {}) {
-    return httpResto(`/restaurants/`, { method: "GET", params });
+    return httpResto(`/`, { method: "GET", params });
 }
+
 
 // ======================================================================
 //                                 ROOMS

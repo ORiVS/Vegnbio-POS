@@ -151,7 +151,7 @@ export default function OfferDetail(){
             if(q < Number(offer.min_order_qty || 0)) { setErr(`Quantité minimale: ${offer.min_order_qty}.`); return; }
 
             // ⬇️ utiliser l'id du fournisseur exposé par l'API
-            const supplierId = offer?.supplier_id ?? offer?.supplier;
+            const supplierId = offer.supplier ?? offer.supplier_id;
             if(!supplierId){ setErr("Fournisseur introuvable pour cette offre."); return; }
 
             await apiCreateSupplierOrder({
@@ -190,28 +190,26 @@ export default function OfferDetail(){
                         Producteur: {offer.producer_name || "—"} • Région: {offer.region} • Unité: {offer.unit}
                     </div>
 
-                    {/* ↘️ Période de disponibilité mise en avant */}
-                    {(offer.available_from || offer.available_to) && (
-                        <div className="text-sm">
-                            {period(offer.available_from, offer.available_to)}
-                        </div>
-                    )}
+                    <div className="text-sm">
+                        Disponibilité :
+                        {" "}
+                        <b>
+                            {offer.available_from ? new Date(offer.available_from).toLocaleDateString() : "—"}
+                            {" "}→{" "}
+                            {offer.available_to ? new Date(offer.available_to).toLocaleDateString() : "—"}
+                        </b>
+                    </div>
 
                     <div className="text-sm">Prix: <b>{Number(offer.price).toFixed(2)} €</b></div>
-                    <div className="text-sm">Min. commande: <b>{offer.min_order_qty}</b> • Stock: <b>{offer.stock_qty}</b></div>
+                    <div className="text-sm">Min. commande: <b>{offer.min_order_qty}</b> •
+                        Stock: <b>{offer.stock_qty}</b></div>
                     <div className="text-sm">Note moyenne: <b>{offer.avg_rating ?? "—"}</b></div>
 
                     {offer.description && (
                         <div className="mt-2 text-sm whitespace-pre-wrap">{offer.description}</div>
                     )}
 
-                    {/* Actions */}
-                    <div className="flex flex-wrap gap-2">
-                        <button className="px-3 py-2 rounded bg-blue-600 hover:bg-blue-500" onClick={onFlag}>Signaler</button>
-                        <button className="px-3 py-2 rounded bg-slate-700 hover:bg-slate-600" onClick={onImportProduct}>
-                            Importer en produit (menu)
-                        </button>
-                    </div>
+
 
                     {/* Commander */}
                     <section className="border rounded-xl p-3">
@@ -222,7 +220,7 @@ export default function OfferDetail(){
                                 <input
                                     type="number" step="0.01" min={offer.min_order_qty || 0.01}
                                     className="border rounded px-2 py-1 w-full"
-                                    value={qty} onChange={(e)=> setQty(e.target.value)}
+                                    value={qty} onChange={(e) => setQty(e.target.value)}
                                 />
                                 <div className="text-xs opacity-70 mt-1">
                                     Min: {offer.min_order_qty} • Stock: {offer.stock_qty}
@@ -233,12 +231,14 @@ export default function OfferDetail(){
                                 <div className="opacity-70 mb-1">Note (optionnel)</div>
                                 <input
                                     className="border rounded px-2 py-1 w-full"
-                                    value={note} onChange={(e)=> setNote(e.target.value)}
+                                    value={note} onChange={(e) => setNote(e.target.value)}
                                 />
                             </label>
 
                             <div className="md:col-span-3">
-                                <button className="px-3 py-2 rounded bg-emerald-600 hover:bg-emerald-500">Envoyer la commande</button>
+                                <button className="px-3 py-2 rounded bg-emerald-600 hover:bg-emerald-500">Envoyer la
+                                    commande
+                                </button>
                             </div>
                         </form>
                     </section>
@@ -252,18 +252,19 @@ export default function OfferDetail(){
                                 <input
                                     type="number" min={1} max={5}
                                     className="border rounded px-2 py-1 w-full"
-                                    value={rating} onChange={(e)=> setRating(e.target.value)}
+                                    value={rating} onChange={(e) => setRating(e.target.value)}
                                 />
                             </label>
                             <label className="text-sm md:col-span-2">
                                 <div className="opacity-70 mb-1">Commentaire (optionnel)</div>
                                 <input
                                     className="border rounded px-2 py-1 w-full"
-                                    value={reviewComment} onChange={(e)=> setReviewComment(e.target.value)}
+                                    value={reviewComment} onChange={(e) => setReviewComment(e.target.value)}
                                 />
                             </label>
                             <div className="md:col-span-3">
-                                <button className="px-3 py-2 rounded bg-sky-600 hover:bg-sky-500">Publier l’avis</button>
+                                <button className="px-3 py-2 rounded bg-sky-600 hover:bg-sky-500">Publier l’avis
+                                </button>
                             </div>
                         </form>
                     </section>
@@ -273,7 +274,7 @@ export default function OfferDetail(){
                         <h3 className="font-medium mb-2">Commentaires</h3>
                         {comments?.length ? (
                             <ul className="space-y-2">
-                                {comments.map(c=>(
+                                {comments.map(c => (
                                     <li key={c.id} className="border rounded p-2">
                                         <div className="text-xs opacity-70 mb-1">
                                             #{c.id} • {new Date(c.created_at).toLocaleString()}
@@ -282,7 +283,7 @@ export default function OfferDetail(){
                                         <div className="mt-1">
                                             <button
                                                 className="text-xs underline opacity-70 hover:opacity-100"
-                                                onClick={()=> onDeleteComment(c.id)}
+                                                onClick={() => onDeleteComment(c.id)}
                                             >
                                                 supprimer (si auteur/admin)
                                             </button>
@@ -297,11 +298,12 @@ export default function OfferDetail(){
                                 <div className="opacity-70 mb-1">Nouveau commentaire</div>
                                 <input
                                     className="border rounded px-2 py-1 w-full"
-                                    value={newComment} onChange={(e)=> setNewComment(e.target.value)}
+                                    value={newComment} onChange={(e) => setNewComment(e.target.value)}
                                 />
                             </label>
                             <div className="md:col-span-1 flex items-end">
-                                <button className="px-3 py-2 rounded bg-slate-800 hover:bg-slate-700 w-full">Ajouter</button>
+                                <button className="px-3 py-2 rounded bg-slate-800 hover:bg-slate-700 w-full">Ajouter
+                                </button>
                             </div>
                         </form>
                     </section>
