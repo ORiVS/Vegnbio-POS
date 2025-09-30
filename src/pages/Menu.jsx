@@ -542,24 +542,6 @@ export default function Menu() {
             )}
           </div>
 
-          {/* Bloc debug rapide (visible en dev) */}
-          {DEBUG && (
-              <details className="p-3 rounded border border-zinc-700 bg-zinc-900/50 text-xs">
-                <summary className="cursor-pointer select-none">Debug</summary>
-                <pre className="mt-2 whitespace-pre-wrap break-words">
-{JSON.stringify(
-    {
-      RESTAURANT_ID,
-      currentOrder,
-      lines,
-      last,
-    },
-    null,
-    2
-)}
-            </pre>
-              </details>
-          )}
         </aside>
 
         {/* Modale d’encaissement */}

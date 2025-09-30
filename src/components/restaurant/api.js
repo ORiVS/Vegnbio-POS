@@ -234,12 +234,20 @@ export function apiUpdateRestaurant(restaurantId, payload) {
 
 export function apiGetAvailability(restaurantId, dateISO) {
     const rid = mustId("apiGetAvailability.restaurantId", restaurantId);
-    return httpResto(`/${rid}/dashboard/`, { method: "GET", params: { date: dateISO } });
+      // NOTE: custom view path = /api/restaurants/restaurants/:id/dashboard/
+          return httpResto(`/restaurants/${rid}/dashboard/`, {
+            method: "GET",
+            params: { date: dateISO },
+      });
 }
 
 export function apiGetRestaurantReservations(restaurantId, { status } = {}) {
     const rid = mustId("apiGetRestaurantReservations.restaurantId", restaurantId);
-    return httpResto(`/${rid}/reservations/`, { method: "GET", params: { status } });
+      // NOTE: custom view path = /api/restaurants/restaurants/:id/reservations/
+          return httpResto(`/restaurants/${rid}/reservations/`, {
+            method: "GET",
+            params: { status },
+      });
 }
 
 export function apiStatsReservations() {
