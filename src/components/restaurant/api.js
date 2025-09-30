@@ -224,17 +224,20 @@ const httpPurch  = (p, opts) => httpRoot(PURCHASING_ROOT, p, opts);
 // ======================================================================
 export function apiGetRestaurant(restaurantId) {
     const rid = mustId("apiGetRestaurant.restaurantId", restaurantId);
-    return httpResto(`/${rid}/`, { method: "GET" });
+      // -> /api/restaurants/restaurants/:id/
+          return httpResto(`/restaurants/${rid}/`, { method: "GET" });
 }
 
 export function apiUpdateRestaurant(restaurantId, payload) {
     const rid = mustId("apiUpdateRestaurant.restaurantId", restaurantId);
-    return httpResto(`/${rid}/`, { method: "PATCH", body: payload });
+      // -> /api/restaurants/restaurants/:id/
+          return httpResto(`/restaurants/${rid}/`, { method: "PATCH", body: payload });
 }
+
 
 export function apiGetAvailability(restaurantId, dateISO) {
     const rid = mustId("apiGetAvailability.restaurantId", restaurantId);
-      // NOTE: custom view path = /api/restaurants/restaurants/:id/dashboard/
+      // -> /api/restaurants/restaurants/:id/dashboard/
           return httpResto(`/restaurants/${rid}/dashboard/`, {
             method: "GET",
             params: { date: dateISO },
@@ -243,7 +246,7 @@ export function apiGetAvailability(restaurantId, dateISO) {
 
 export function apiGetRestaurantReservations(restaurantId, { status } = {}) {
     const rid = mustId("apiGetRestaurantReservations.restaurantId", restaurantId);
-      // NOTE: custom view path = /api/restaurants/restaurants/:id/reservations/
+      // -> /api/restaurants/restaurants/:id/reservations/
           return httpResto(`/restaurants/${rid}/reservations/`, {
             method: "GET",
             params: { status },
@@ -255,7 +258,8 @@ export function apiStatsReservations() {
 }
 
 export function apiListRestaurants(params = {}) {
-    return httpResto(`/`, { method: "GET", params });
+      // -> /api/restaurants/restaurants/
+          return httpResto(`/restaurants/`, { method: "GET", params });
 }
 
 
