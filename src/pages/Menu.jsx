@@ -241,7 +241,9 @@ export default function Menu() {
   const optimisticAdd = (dish) => {
     setLines((prev) => {
       // si ligne déjà présente (même nom/prix), on incrémente
-      const idx = prev.findIndex((l) => l.name === (dish.name || "Article") && Number(l.unit_price) === Number(dish.price || 0));
+      const idx = prev.findIndex(
+          (l) => l.name === (dish.name || "Article") && Number(l.unit_price) === Number(dish.price || 0)
+      );
       if (idx >= 0) {
         const copy = [...prev];
         copy[idx] = { ...copy[idx], quantity: Number(copy[idx].quantity || 1) + 1 };
@@ -334,6 +336,12 @@ export default function Menu() {
     });
   };
 
+  // Totaux affichés dans la colonne droite
+  const localSubtotal = lines.reduce((acc, it) => acc + Number(it.unit_price || 0) * Number(it.quantity || 0), 0);
+  const shownTotal = Number(currentOrder?.total_due ?? localSubtotal);
+  const shownPaid  = Number(currentOrder?.paid_amount ?? 0);
+  const shownLeft  = Math.max(0, shownTotal - shownPaid);
+
   return (
       <section className="p-8 grid grid-cols-12 gap-4">
         {/* Erreurs */}
@@ -386,8 +394,7 @@ export default function Menu() {
                                       const dish = dishById.get(id) || (typeof it.dish === "object" ? it.dish : null);
                                       const isAvailable = !!(id && availSet.has(id));
                                       const title = isAvailable && dish ? dish.name : "(Plat indisponible)";
-                                      const price =
-                                          isAvailable && dish?.price != null ? Number(dish.price).toFixed(2) + " €" : "—";
+                                      const price = isAvailable && dish?.price != null ? Number(dish.price).toFixed(2) + " €" : "—";
                                       const allergens = (dish?.allergens || []).map((a) => a.label).join(", ");
 
                                       return (
@@ -490,9 +497,22 @@ export default function Menu() {
                       </div>
                   ))}
 
+                  {/* Totaux visibles */}
                   <hr className="border-[#2a2a2a]" />
+                  <div className="text-sm flex items-center justify-between">
+                    <span className="opacity-80">Total (TTC)</span>
+                    <span className="font-semibold">{shownTotal.toFixed(2)} €</span>
+                  </div>
+                  <div className="text-xs flex items-center justify-between opacity-80">
+                    <span>Déjà payé</span>
+                    <span>{shownPaid.toFixed(2)} €</span>
+                  </div>
+                  <div className="text-xs flex items-center justify-between opacity-80">
+                    <span>Reste à payer</span>
+                    <span>{shownLeft.toFixed(2)} €</span>
+                  </div>
 
-                  <div className="text-sm flex items-center gap-2">
+                  <div className="text-sm flex items-center gap-2 pt-1">
                     <input
                         className="bg-[#121212] p-2 rounded w-24"
                         placeholder="Remise €"

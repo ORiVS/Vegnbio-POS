@@ -1,3 +1,4 @@
+// src/https.js
 import axios from "axios";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "https://vegnbio.onrender.com/api";
@@ -36,23 +37,29 @@ export const getOrders = async (params) => {
     return [];
 };
 
-export const hold = (orderId)   => api.post(`/pos/orders/${orderId}/hold/`, {});
-export const reopen = (orderId) => api.post(`/pos/orders/${orderId}/reopen/`, {});
+export const hold      = (orderId) => api.post(`/pos/orders/${orderId}/hold/`, {});
+export const reopen    = (orderId) => api.post(`/pos/orders/${orderId}/reopen/`, {});
 export const cancelOrder = (orderId) => api.post(`/pos/orders/${orderId}/cancel/`, {});
 
 // encaissement: { method: "CASH|CARD|ONLINE", amount: number|null }
 export const checkout = (orderId, method, amount, note = "") =>
     api.post(`/pos/orders/${orderId}/checkout/`, { method, amount, note });
 
-export const ticket  = (orderId) => api.get(`/pos/orders/${orderId}/ticket/`);
-export const summary = (params)  => api.get("/pos/orders/summary/", { params });
+/**
+ * Ticket JSON (détail de la commande)
+ * ⚠️ Correction: on lit le détail order → /pos/orders/{id}/
+ * (L’endpoint /ticket/ n’existe pas en JSON, seulement /ticket.pdf)
+ */
+export const ticket  = (orderId) => api.get(`/pos/orders/${orderId}/`);
+
+export const summary = (params)   => api.get("/pos/orders/summary/", { params });
 
 // lignes
-export const addItem = (orderId, payload) =>
+export const addItem   = (orderId, payload)               =>
     api.post(`/pos/orders/${orderId}/add_item/`, payload);
-export const updateItem = (orderId, itemId, partialData) =>
+export const updateItem = (orderId, itemId, partialData)  =>
     api.patch(`/pos/orders/${orderId}/items/${itemId}/update/`, partialData);
-export const removeItem = (orderId, itemId) =>
+export const removeItem = (orderId, itemId)               =>
     api.delete(`/pos/orders/${orderId}/items/${itemId}/remove/`);
 
 /* ============ DISHES / MENUS ============ */
@@ -78,7 +85,6 @@ export const getTicketPdf = async (orderId, { inline = true } = {}) => {
         responseType: "blob",
         params: inline ? { inline: 1 } : {},
     });
-    // Axios renvoie déjà un Blob; on s'assure du type
     const blob = res.data instanceof Blob ? res.data : new Blob([res.data], { type: "application/pdf" });
     return blob;
 };
