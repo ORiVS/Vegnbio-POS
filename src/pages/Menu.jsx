@@ -14,54 +14,134 @@ import {
 } from "../https";
 import CheckoutDialog from "../components/checkout/CheckoutDialog";
 
-// Date du jour au format YYYY-MM-DD (robuste aux fuseaux)
-const TODAY = new Date().toLocaleDateString("sv-SE"); // ex: 2025-09-17
+// Date du jour en ISO "sv-SE" (YYYY-MM-DD)
+const TODAY = new Date().toLocaleDateString("sv-SE");
 
-// Regroupe les items d'un menu par course_type
+// util – regroupe les items d’un menu par course_type
 const groupByCourse = (items = []) =>
     items.reduce((acc, it) => {
       const key = (it.course_type || "AUTRE").toUpperCase();
-      acc[key] = acc[key] || [];
-      acc[key].push(it);
+      (acc[key] ||= []).push(it);
       return acc;
     }, {});
 
-export default function Menu() {
-  // it.dish peut être un objet (lecture) ou un id (écriture)
-  const dishIdOf = (x) => (x && typeof x === "object" ? x.id : x);
+// util – map course -> label FR
+function labelCourse(key) {
+  switch (String(key).toUpperCase()) {
+    case "ENTREE":
+      return "Entrées";
+    case "PLAT":
+      return "Plats";
+    case "DESSERT":
+      return "Desserts";
+    case "BOISSON":
+      return "Boissons";
+    default:
+      return key;
+  }
+}
 
-  // ⚠️ On lit l’ID du resto dans Redux (ex: s.user.restaurantId)
+// ────────────────────────────────────────────────────────────────────────────────
+// Normalisation robuste de la réponse ticket (différents back/implémentations)
+// ────────────────────────────────────────────────────────────────────────────────
+function pickFirstArray(obj, keys = []) {
+  for (const k of keys) {
+    const v = obj?.[k];
+    if (Array.isArray(v)) return v;
+  }
+  return [];
+}
+
+function normNumber(v, fallback = 0) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function normalizeTicket(raw) {
+  if (!raw || typeof raw !== "object") {
+    return { items: [], totals: { total_due: 0, paid_amount: 0 } };
+  }
+
+  // possibles conteneurs d’items selon les back-ends
+  const rawItems = pickFirstArray(raw, [
+    "items",
+    "lines",
+    "order_items",
+    "orderItems",
+    "details",
+  ]);
+
+  const items = rawItems
+      .map((it, i) => {
+        // essais multiples pour récupérer id/dish/nom/prix/qté
+        const id =
+            it.id ?? it.item_id ?? it.line_id ?? it.pk ?? `tmp-${Date.now()}-${i}`;
+        const dish =
+            it.dish ?? it.dish_id ?? it.product ?? it.product_id ?? null;
+        const name =
+            it.label ??
+            it.name ??
+            it.dish_name ??
+            it.product_name ??
+            it.title ??
+            "Article";
+        const unit_price =
+            normNumber(
+                it.unit_price ?? it.price ?? it.unitPrice ?? it.amount_ht,
+                0
+            );
+        const quantity = normNumber(it.quantity ?? it.qty ?? it.qte, 1);
+        const status = String(it.status || "ACTIVE").toUpperCase();
+        const is_void = Boolean(it.is_void || it.is_deleted || status === "VOID" || status === "CANCELLED" || status === "DELETED");
+
+        return { id, dish, name, unit_price, quantity, status, is_void };
+      })
+      .filter((it) => !it.is_void);
+
+  const totals = {
+    total_due: normNumber(raw.total_due ?? raw.total ?? raw.totalDue, 0),
+    paid_amount: normNumber(raw.paid_amount ?? raw.paid ?? raw.paidAmount, 0),
+  };
+
+  return { items, totals };
+}
+
+// ────────────────────────────────────────────────────────────────────────────────
+
+export default function Menu() {
+  // id du resto depuis Redux (ex: s.user.restaurantId)
   const restaurantIdFromUser = useSelector((s) => s.user?.restaurantId);
-  const RESTAURANT_ID = restaurantIdFromUser || 1; // fallback sécurisé
+  const RESTAURANT_ID = restaurantIdFromUser || 1; // fallback sûr
 
   const [currentOrder, setCurrentOrder] = useState(null);
+  const [lines, setLines] = useState([]);
+  const [discount, setDiscount] = useState({ amount: "0.00", percent: "0.00" });
+
   const [dishes, setDishes] = useState([]);
   const [menus, setMenus] = useState([]);
   const [availSet, setAvailSet] = useState(() => new Set());
-
-  const [lines, setLines] = useState([]);
-  const [discount, setDiscount] = useState({ amount: "0.00", percent: "0.00" });
-  const [showCheckout, setShowCheckout] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [showCheckout, setShowCheckout] = useState(false);
 
-  // map rapide: dishId -> dish
+  // map id -> dish
   const dishById = useMemo(() => {
     const map = new Map();
-    for (const d of dishes) map.set(d.id, d);
+    dishes.forEach((d) => map.set(d.id, d));
     return map;
   }, [dishes]);
+
+  // helpers
+  const dishIdOf = (x) => (x && typeof x === "object" ? x.id : x);
 
   useEffect(() => {
     document.title = "Veg'N Bio | Menu";
   }, []);
 
+  // charge menus/plats/disponibilités
   useEffect(() => {
-    // recharge quand le resto change (changement d’utilisateur)
     (async () => {
       try {
         setLoading(true);
-
-        // Chargements en parallèle
         const [dishList, menuList, availList] = await Promise.all([
           getDishes({ is_active: "true" }),
           getMenus({ restaurant: RESTAURANT_ID, date: TODAY }),
@@ -69,7 +149,11 @@ export default function Menu() {
         ]);
 
         setDishes(Array.isArray(dishList) ? dishList : []);
-        setMenus((Array.isArray(menuList) ? menuList : []).filter((m) => m.is_published !== false));
+        setMenus(
+            (Array.isArray(menuList) ? menuList : []).filter(
+                (m) => m.is_published !== false
+            )
+        );
 
         const ids = (Array.isArray(availList) ? availList : [])
             .filter((a) => a.is_available === true)
@@ -81,59 +165,66 @@ export default function Menu() {
     })();
   }, [RESTAURANT_ID]);
 
-  // Synchronise la colonne "Commande" depuis le ticket (vérité serveur)
+  // récup server → colonnes de droite
   const syncFromTicket = async (orderId) => {
     const { data: t } = await ticket(orderId);
-    const safeItems = Array.isArray(t?.items) ? t.items : [];
-    const normalized = safeItems
-        .map((it, i) => ({
-          id: it.id ?? it.item_id ?? it.pk ?? `tmp-${Date.now()}-${i}`,
-          dish: it.dish ?? null,
-          name:
-              it.label ??
-              it.name ??
-              it.dish_name ??
-              it.title ??
-              it.product_name ??
-              "Article",
-          unit_price: Number(it.unit_price ?? it.price ?? it.unitPrice ?? it.amount_ht ?? 0),
-          quantity: Number(it.quantity ?? it.qty ?? 1),
-          status: (it.status ?? "ACTIVE").toUpperCase(),
-          is_void: Boolean(it.is_void) || Boolean(it.is_deleted),
-        }))
-        .filter(
-            (it) =>
-                !it.is_void &&
-                it.status !== "VOID" &&
-                it.status !== "CANCELLED" &&
-                it.status !== "DELETED"
-        );
-
-    setLines(normalized);
+    const norm = normalizeTicket(t);
+    setLines(norm.items);
     setCurrentOrder((prev) =>
-        prev ? { ...prev, total_due: t.total_due, paid_amount: t.paid_amount } : prev
+        prev
+            ? { ...prev, total_due: norm.totals.total_due, paid_amount: norm.totals.paid_amount }
+            : { id: orderId, ...norm.totals }
     );
   };
 
   const ensureOrder = async () => {
     if (currentOrder?.id) return currentOrder.id;
-    const { data } = await addOrder({ restaurant: RESTAURANT_ID, note: "Sur place" });
+    const { data } = await addOrder({
+      restaurant: RESTAURANT_ID,
+      note: "Sur place",
+    });
     setCurrentOrder(data);
     setLines([]);
     await syncFromTicket(data.id);
     return data.id;
   };
 
+  // Ajout optimiste si le ticket ne renvoie pas les items
+  const addOptimisticIfEmpty = (dish) => {
+    setLines((prev) => {
+      if (prev.length > 0) return prev;
+      const tmpId = `tmp-${Date.now()}`;
+      const line = {
+        id: tmpId,
+        dish: dish.id,
+        name: dish.name || "Article",
+        unit_price: Number(dish.price) || 0,
+        quantity: 1,
+        status: "ACTIVE",
+        is_void: false,
+      };
+      return [line];
+    });
+  };
+
   const add = async (dish) => {
     const orderId = await ensureOrder();
-    await addItem(orderId, { dish: dish.id, unit_price: dish.price, quantity: 1 });
+    // payload tolérant : la plupart des APIs POS acceptent dish + unit_price + quantity
+    await addItem(orderId, {
+      dish: dish.id,
+      unit_price: dish.price,
+      quantity: 1,
+    });
     await syncFromTicket(orderId);
+    // si toujours vide (backend qui ne renvoie pas les lignes), on montre tout de suite
+    setTimeout(() => addOptimisticIfEmpty(dish), 50);
   };
 
   const addFromMenuItem = async (menuItem) => {
     const id = dishIdOf(menuItem.dish);
-    if (!id || !availSet.has(id)) return; // Empêche d’ajouter si indispo
-    const d = dishById.get(id) || (typeof menuItem.dish === "object" ? menuItem.dish : null);
+    if (!id || !availSet.has(id)) return;
+    const d =
+        dishById.get(id) || (typeof menuItem.dish === "object" ? menuItem.dish : null);
     if (!d) return;
     await add(d);
   };
@@ -162,7 +253,7 @@ export default function Menu() {
 
   return (
       <section className="p-8 grid grid-cols-12 gap-4">
-        {/* Colonne gauche : menus du jour + plats à la carte */}
+        {/* Colonne gauche : menus + plats */}
         <div className="col-span-12 lg:col-span-8 space-y-6">
           <div className="flex items-center justify-between">
             <h1 className="text-xl font-semibold">Menu du jour & Carte</h1>
@@ -183,7 +274,9 @@ export default function Menu() {
               {loading ? (
                   <div className="opacity-80 text-sm">Chargement des menus…</div>
               ) : menus.length === 0 ? (
-                  <div className="opacity-60 text-sm">Aucun menu publié pour aujourd’hui.</div>
+                  <div className="opacity-60 text-sm">
+                    Aucun menu publié pour aujourd’hui.
+                  </div>
               ) : (
                   menus.map((m) => {
                     const groups = groupByCourse(m.items || []);
@@ -198,21 +291,26 @@ export default function Menu() {
 
                           <div className="grid md:grid-cols-2 gap-4">
                             {Object.entries(groups).map(([course, items]) => (
-                                <div key={course} className="border border-[#2a2a2a] rounded-lg">
+                                <div
+                                    key={course}
+                                    className="border border-[#2a2a2a] rounded-lg"
+                                >
                                   <div className="px-3 py-2 bg-[#111] text-xs uppercase tracking-wide opacity-80">
                                     {labelCourse(course)}
                                   </div>
 
                                   <div className="p-3 space-y-2">
                                     {items.map((it) => {
-                                      const dishId = dishIdOf(it.dish);
+                                      const id = dishIdOf(it.dish);
                                       const dish =
-                                          dishById.get(dishId) ||
+                                          dishById.get(id) ||
                                           (typeof it.dish === "object" ? it.dish : null);
-                                      const isAvailable = !!(dishId && availSet.has(dishId));
+                                      const isAvailable = !!(id && availSet.has(id));
 
                                       const title =
-                                          isAvailable && dish ? dish.name : "(Plat indisponible)";
+                                          isAvailable && dish
+                                              ? dish.name
+                                              : "(Plat indisponible)";
                                       const price =
                                           isAvailable && dish?.price != null
                                               ? Number(dish.price).toFixed(2) + " €"
@@ -224,7 +322,9 @@ export default function Menu() {
                                       return (
                                           <button
                                               key={it.id}
-                                              onClick={() => isAvailable && dish && addFromMenuItem(it)}
+                                              onClick={() =>
+                                                  isAvailable && dish && addFromMenuItem(it)
+                                              }
                                               className={
                                                   "w-full text-left p-3 rounded border border-[#2a2a2a] " +
                                                   (isAvailable
@@ -241,10 +341,14 @@ export default function Menu() {
                                           >
                                             <div className="flex items-center justify-between">
                                               <div className="font-medium">{title}</div>
-                                              <div className="text-sm opacity-80">{price}</div>
+                                              <div className="text-sm opacity-80">
+                                                {price}
+                                              </div>
                                             </div>
                                             {allergens && (
-                                                <div className="text-xs opacity-70 mt-1">{allergens}</div>
+                                                <div className="text-xs opacity-70 mt-1">
+                                                  {allergens}
+                                                </div>
                                             )}
                                           </button>
                                       );
@@ -281,12 +385,16 @@ export default function Menu() {
                       </span>
                           )}
                         </div>
-                        <div className="text-sm opacity-80">{Number(d.price).toFixed(2)} €</div>
+                        <div className="text-sm opacity-80">
+                          {Number(d.price).toFixed(2)} €
+                        </div>
                         <div className="text-xs opacity-70 mt-1">
                           {(d.allergens || []).map((a) => a.label).join(", ")}
                         </div>
                         {d.description && (
-                            <div className="text-xs opacity-60 mt-2 line-clamp-2">{d.description}</div>
+                            <div className="text-xs opacity-60 mt-2 line-clamp-2">
+                              {d.description}
+                            </div>
                         )}
                       </button>
                   ))}
@@ -344,13 +452,17 @@ export default function Menu() {
                         className="bg-[#121212] p-2 rounded w-24"
                         placeholder="Remise €"
                         value={discount.amount}
-                        onChange={(e) => setDiscount((s) => ({ ...s, amount: e.target.value }))}
+                        onChange={(e) =>
+                            setDiscount((s) => ({ ...s, amount: e.target.value }))
+                        }
                     />
                     <input
                         className="bg-[#121212] p-2 rounded w-24"
                         placeholder="Remise %"
                         value={discount.percent}
-                        onChange={(e) => setDiscount((s) => ({ ...s, percent: e.target.value }))}
+                        onChange={(e) =>
+                            setDiscount((s) => ({ ...s, percent: e.target.value }))
+                        }
                     />
                     <button
                         className="px-3 py-2 rounded bg-zinc-700 hover:bg-zinc-600"
@@ -385,19 +497,4 @@ export default function Menu() {
         />
       </section>
   );
-}
-
-function labelCourse(key) {
-  switch (String(key).toUpperCase()) {
-    case "ENTREE":
-      return "Entrées";
-    case "PLAT":
-      return "Plats";
-    case "DESSERT":
-      return "Desserts";
-    case "BOISSON":
-      return "Boissons";
-    default:
-      return key;
-  }
 }

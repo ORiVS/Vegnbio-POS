@@ -124,20 +124,6 @@ export default function OffersList(){
                 </label>
 
                 <label className="text-sm">
-                    <div className="opacity-70 mb-1">Allergènes (inclure) — codes CSV</div>
-                    <input className="border rounded px-2 py-1 w-full"
-                           placeholder="GLUTEN,EGG"
-                           value={allergen} onChange={(e)=> setAllergen(e.target.value)} />
-                </label>
-
-                <label className="text-sm">
-                    <div className="opacity-70 mb-1">Allergènes (exclure) — codes CSV</div>
-                    <input className="border rounded px-2 py-1 w-full"
-                           placeholder="PEANUT"
-                           value={excludeAllergens} onChange={(e)=> setExcludeAllergens(e.target.value)} />
-                </label>
-
-                <label className="text-sm">
                     <div className="opacity-70 mb-1">Tri</div>
                     <select className="border rounded px-2 py-1 w-full"
                             value={sort} onChange={(e)=> setSort(e.target.value)}>
