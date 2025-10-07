@@ -393,10 +393,11 @@ export function apiGetRegistrations(eventId) {
     return httpResto(`/evenements/${mustId("apiGetRegistrations.eventId", eventId)}/registrations/`, { method: "GET" });
 }
 
-export function apiInvite(eventId, { email, phone }) {
+export function apiInvite(eventId, payload = {}) {
+    // payload possible: { invited_user } ou { email } ou { phone } … (le back gère)
     return httpResto(`/evenements/${mustId("apiInvite.eventId", eventId)}/invite/`, {
         method: "POST",
-        body: { email, phone },
+        body: payload,
     });
 }
 export const apiSendInvite = apiInvite;
