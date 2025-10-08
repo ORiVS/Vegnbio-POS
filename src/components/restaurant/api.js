@@ -510,8 +510,8 @@ export function apiDeleteOfferComment(commentId) {
 // ======================================================================
 //                             PURCHASING (orders)
 // ======================================================================
+
 export function apiCreateSupplierOrder({ supplier, note = "", items = [] }) {
-    // items: [{offer: id, qty_requested: number}, ...] (tous du même supplier)
     const body = {
         supplier: mustId("apiCreateSupplierOrder.supplier", supplier),
         note,
@@ -523,17 +523,19 @@ export function apiCreateSupplierOrder({ supplier, note = "", items = [] }) {
     return httpPurch(`/orders/`, { method: "POST", body });
 }
 
+// ✅ correspond à /api/purchasing/orders/my_restaurant/ côté back
 export function apiMyRestaurantOrders() {
-    return httpPurch(`/orders/my_restaurant_orders/`, { method: "GET" });
+    return httpPurch(`/orders/my_restaurant/`, { method: "GET" });
 }
 
+// ✅ correspond à /api/purchasing/orders/supplier_inbox/ côté back
 export function apiSupplierInbox() {
     return httpPurch(`/orders/supplier_inbox/`, { method: "GET" });
 }
 
+// ✅ correspond à /api/purchasing/orders/{id}/review/ côté back
 export function apiSupplierReview(orderId, items) {
-    // items: [{id, qty_confirmed}, ...]
-    return httpPurch(`/orders/${mustId("apiSupplierReview.orderId", orderId)}/supplier_review/`, {
+    return httpPurch(`/orders/${mustId("apiSupplierReview.orderId", orderId)}/review/`, {
         method: "POST",
         body: { items },
     });

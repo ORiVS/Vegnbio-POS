@@ -48,10 +48,23 @@ function ErrorBanner({error, onClose}){
 
 function badgeCls(s){
     switch(s){
-        case "CONFIRMED": return "bg-emerald-600/10 text-emerald-600";
-        case "PARTIALLY_CONFIRMED": return "bg-amber-600/10 text-amber-600";
-        case "REJECTED": return "bg-rose-600/10 text-rose-600";
-        default: return "bg-slate-600/10 text-slate-600";
+        case "CONFIRMED":            return "bg-emerald-600/10 text-emerald-600";
+        case "PARTIALLY_CONFIRMED":  return "bg-amber-600/10 text-amber-600";
+        case "REJECTED":             return "bg-rose-600/10 text-rose-600";
+        case "PENDING_SUPPLIER":     return "bg-sky-600/10 text-sky-600";
+        case "CANCELLED":            return "bg-gray-600/10 text-gray-600";
+        default:                     return "bg-slate-600/10 text-slate-600";
+    }
+}
+
+function statusLabel(s){
+    switch(s){
+        case "PENDING_SUPPLIER":     return "En attente producteur";
+        case "CONFIRMED":            return "Confirmée";
+        case "PARTIALLY_CONFIRMED":  return "Partiellement confirmée";
+        case "REJECTED":             return "Rejetée";
+        case "CANCELLED":            return "Annulée";
+        default:                     return s || "—";
     }
 }
 
@@ -90,7 +103,13 @@ export default function MyOrders(){
         <div className="p-6 space-y-4">
             <div className="flex items-center justify-between">
                 <h1 className="text-2xl font-semibold">Mes commandes fournisseurs</h1>
-                <button className="px-3 py-2 rounded border" onClick={load}>Rafraîchir</button>
+                <button
+                    className="px-3 py-2 rounded border disabled:opacity-50"
+                    onClick={load}
+                    disabled={loading}
+                >
+                    {loading ? "Chargement…" : "Rafraîchir"}
+                </button>
             </div>
 
             {err && <ErrorBanner error={err} onClose={()=>setErr(null)} />}
@@ -109,9 +128,11 @@ export default function MyOrders(){
                                             Créée le {o.created_at ? new Date(o.created_at).toLocaleString() : "—"}
                                             {o.confirmed_at ? <> • Confirmée le <b>{new Date(o.confirmed_at).toLocaleString()}</b></> : null}
                                         </div>
-                                        <div className="text-xs opacity-70">Fournisseur: #{o.supplier}</div>
+                                        <div className="text-xs opacity-70">Fournisseur&nbsp;: #{o.supplier}</div>
                                     </div>
-                                    <div className={`px-2 py-1 rounded text-xs h-min ${badgeCls(o.status)}`}>{o.status}</div>
+                                    <div className={`px-2 py-1 rounded text-xs h-min ${badgeCls(o.status)}`}>
+                                        {statusLabel(o.status)}
+                                    </div>
                                 </div>
 
                                 {/* Items */}
@@ -148,7 +169,7 @@ export default function MyOrders(){
                                             <tr className="border-t font-medium">
                                                 <td className="py-2 px-3" colSpan={6}>Totaux</td>
                                                 <td>{euro(totalRequested(o))}</td>
-                                                <td>{o.status==="CONFIRMED"||o.status==="PARTIALLY_CONFIRMED" ? euro(totalConfirmed(o)) : "—"}</td>
+                                                <td>{["CONFIRMED","PARTIALLY_CONFIRMED"].includes(o.status) ? euro(totalConfirmed(o)) : "—"}</td>
                                             </tr>
                                             </tfoot>
                                         </table>
