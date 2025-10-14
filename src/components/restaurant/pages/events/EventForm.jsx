@@ -270,7 +270,7 @@ function RRuleBuilder({ value, onChange }) {
                 <label className="text-sm">
                     <div className="mb-1 opacity-70">Fréquence</div>
                     <select
-                        className="border rounded px-2 py-1 w-full"
+                        className="border rounded px-2 py-1 w-full bg-gray-50 text-gray-900 placeholder-gray-400 focus:bg-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200"
                         value={freq}
                         onChange={(e) => setUi((u) => ({ ...u, freq: e.target.value }))}
                     >
@@ -288,7 +288,7 @@ function RRuleBuilder({ value, onChange }) {
                         <input
                             type="number"
                             min={1}
-                            className="border rounded px-2 py-1 w-full"
+                            className="border rounded px-2 py-1 w-full bg-gray-50 text-gray-900 placeholder-gray-400 focus:bg-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200"
                             value={ui.interval ?? 1}
                             onChange={(e) => setUi((u) => ({ ...u, interval: Math.max(1, Number(e.target.value || 1)) }))}
                         />
@@ -340,7 +340,7 @@ function RRuleBuilder({ value, onChange }) {
                         type="number"
                         min={1}
                         max={31}
-                        className="border rounded px-2 py-1 w-full"
+                        className="border rounded px-2 py-1 w-full bg-gray-50 text-gray-900 placeholder-gray-400 focus:bg-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200"
                         value={ui.byMonthDay || ""}
                         onChange={(e) => setUi((u) => ({ ...u, byMonthDay: e.target.value ? Number(e.target.value) : "" }))}
                         placeholder="ex. 1 (le 1er du mois)"
@@ -354,7 +354,7 @@ function RRuleBuilder({ value, onChange }) {
                     <label className="text-sm">
                         <div className="mb-1 opacity-70">Mois</div>
                         <select
-                            className="border rounded px-2 py-1 w-full"
+                            className="border rounded px-2 py-1 w-full bg-gray-50 text-gray-900 placeholder-gray-400 focus:bg-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200"
                             value={ui.byMonth || ""}
                             onChange={(e) =>
                                 setUi((u) => ({ ...u, byMonth: e.target.value ? Number(e.target.value) : "" }))
@@ -375,7 +375,7 @@ function RRuleBuilder({ value, onChange }) {
                             type="number"
                             min={1}
                             max={31}
-                            className="border rounded px-2 py-1 w-full"
+                            className="border rounded px-2 py-1 w-full bg-gray-50 text-gray-900 placeholder-gray-400 focus:bg-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200"
                             value={ui.byMonthDay || ""}
                             onChange={(e) => setUi((u) => ({ ...u, byMonthDay: e.target.value ? Number(e.target.value) : "" }))}
                             placeholder="ex. 15 (le 15 du mois)"
@@ -389,22 +389,6 @@ function RRuleBuilder({ value, onChange }) {
             <div className="text-xs px-3 py-2 rounded bg-slate-50 text-slate-700">
                 {rruleSummary(buildRRuleFromUi(ui))}
             </div>
-
-            {/* Avancé (texte brut RRULE) */}
-            <details className="text-sm">
-                <summary className="cursor-pointer select-none">Avancé (texte RRULE)</summary>
-                <div className="mt-2">
-                    <input
-                        className="border rounded px-2 py-1 w-full"
-                        value={value || ""}
-                        onChange={(e) => onChange?.(e.target.value)}
-                        placeholder="Ex. FREQ=WEEKLY;BYDAY=TU"
-                    />
-                    <div className="text-xs opacity-70 mt-1">
-                        Laissez vide pour aucune répétition. Les formats standard iCal sont acceptés (FREQ, BYDAY, BYMONTHDAY…).
-                    </div>
-                </div>
-            </details>
         </div>
     );
 }

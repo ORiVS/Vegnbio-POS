@@ -36,3 +36,26 @@ body {
   0% { transform: rotate(0deg); }
   100% { transform: rotate(360deg); }
 }
+
+/* Amélioration du contraste des champs de formulaire */
+input, select, textarea {
+  background-color: #f9fafb; /* gris clair */
+  color: #111827;            /* texte presque noir */
+  border-color: #d1d5db;     /* bordure gris clair */
+  transition: all 0.2s ease-in-out;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: #9ca3af; /* placeholder gris clair */
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  background-color: #ffffff; /* fond blanc quand actif */
+  border-color: #10b981;     /* vert émeraude */
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.3); /* halo vert */
+  color: #111827;
+}
