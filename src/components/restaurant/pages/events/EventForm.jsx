@@ -1,3 +1,4 @@
+// src/components/restaurant/pages/events/EventForm.jsx
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import useActiveRestaurantId from "../../hooks/useActiveRestaurantId";
@@ -85,6 +86,38 @@ function FieldError({ errors }) {
 /* ---------- Domain helpers ---------- */
 const TYPES = ["ANNIVERSAIRE", "CONFERENCE", "SEMINAIRE", "ANIMATION", "AUTRE"];
 
+// RRULE helpers
+const WEEKDAYS = [
+    { v: "MO", label: "Lundi" },
+    { v: "TU", label: "Mardi" },
+    { v: "WE", label: "Mercredi" }, // volontairement "WE" ? Non → corrigeons :
+];
+// Petite correction : vrai tableau pour RRULE (MO,TU,WE,TH,FR,SA,SU)
+const RR_WEEKDAYS = [
+    { v: "MO", label: "Lundi" },
+    { v: "TU", label: "Mardi" },
+    { v: "WE", label: "Mercredi" },
+    { v: "TH", label: "Jeudi" },
+    { v: "FR", label: "Vendredi" },
+    { v: "SA", label: "Samedi" },
+    { v: "SU", label: "Dimanche" },
+];
+
+const MONTHS = [
+    { v: 1, label: "Janvier" },
+    { v: 2, label: "Février" },
+    { v: 3, label: "Mars" },
+    { v: 4, label: "Avril" },
+    { v: 5, label: "Mai" },
+    { v: 6, label: "Juin" },
+    { v: 7, label: "Juillet" },
+    { v: 8, label: "Août" },
+    { v: 9, label: "Septembre" },
+    { v: 10, label: "Octobre" },
+    { v: 11, label: "Novembre" },
+    { v: 12, label: "Décembre" },
+];
+
 function weekdayFromISO(dateStr) {
     // 0=Mon … 6=Sun to match Python weekday()
     try {
@@ -135,86 +168,248 @@ function isWithinOpening(meta, dateISO, start, end) {
     return inToday || inPrevSpill;
 }
 
-/* ---------- RRULE helper (simple, sans lib externe) ---------- */
-const WEEKDAYS = [
-    { key: "MO", label: "Lun" },
-    { key: "TU", label: "Mar" },
-    { key: "WE", label: "Mer" },
-    { key: "TH", label: "Jeu" },
-    { key: "FR", label: "Ven" },
-    { key: "SA", label: "Sam" },
-    { key: "SU", label: "Dim" },
-];
+/* ---------- RRULE <-> UI: builder & parser simples ---------- */
 
-function buildRRule({ freq, interval = 1, byday = [], bymonthday = "", until = "", count = "" }) {
-    if (!freq) return "";
+function buildRRuleFromUi({ freq, interval, byDay, byMonthDay, byMonth }) {
+    if (freq === "NONE") return "";
     const parts = [`FREQ=${freq}`];
+    if (interval && Number(interval) > 1) parts.push(`INTERVAL=${Number(interval)}`);
 
-    const nInterval = Number(interval || 1);
-    if (Number.isFinite(nInterval) && nInterval > 1) parts.push(`INTERVAL=${nInterval}`);
-
-    if (freq === "WEEKLY" && byday.length) parts.push(`BYDAY=${byday.join(",")}`);
-    if (freq === "MONTHLY" && bymonthday) parts.push(`BYMONTHDAY=${bymonthday}`);
-
-    // fin : soit COUNT, soit UNTIL (YYYYMMDD)
-    const c = Number(count || 0);
-    if (Number.isFinite(c) && c > 0) {
-        parts.push(`COUNT=${c}`);
-    } else if (until) {
-        try {
-            const d = new Date(until);
-            const y = d.getFullYear();
-            const m = String(d.getMonth() + 1).padStart(2, "0");
-            const day = String(d.getDate()).padStart(2, "0");
-            parts.push(`UNTIL=${y}${m}${day}`);
-        } catch {
-            // ignore si invalide
+    if (freq === "WEEKLY") {
+        const days = (byDay || []).filter(Boolean);
+        if (days.length) parts.push(`BYDAY=${days.join(",")}`);
+    } else if (freq === "MONTHLY") {
+        if (byMonthDay && Number(byMonthDay) >= 1 && Number(byMonthDay) <= 31) {
+            parts.push(`BYMONTHDAY=${Number(byMonthDay)}`);
+        }
+    } else if (freq === "YEARLY") {
+        if (byMonth && Number(byMonth) >= 1 && Number(byMonth) <= 12) {
+            parts.push(`BYMONTH=${Number(byMonth)}`);
+        }
+        if (byMonthDay && Number(byMonthDay) >= 1 && Number(byMonthDay) <= 31) {
+            parts.push(`BYMONTHDAY=${Number(byMonthDay)}`);
         }
     }
-
     return parts.join(";");
 }
 
-function humanizeRRule({ freq, interval = 1, byday = [], bymonthday = "", until = "", count = "" }) {
-    if (!freq) return "Aucune récurrence.";
-    const EVERY = interval && Number(interval) > 1 ? `toutes les ${interval} ` : "chaque ";
+// Parser très simple pour pré-remplir l’UI en mode edit (couvre 80% des cas)
+function parseRRule(rrule) {
+    const def = { freq: "NONE", interval: 1, byDay: [], byMonthDay: "", byMonth: "" };
+    if (!rrule || typeof rrule !== "string") return def;
+    const parts = rrule.split(";").map((s) => s.trim()).filter(Boolean);
+    const map = {};
+    parts.forEach((p) => {
+        const [k, v] = p.split("=");
+        if (k && v) map[k.toUpperCase()] = v.toUpperCase();
+    });
 
-    if (freq === "WEEKLY") {
-        const days = byday.length
-            ? byday
-                .map((d) => {
-                    const f = WEEKDAYS.find((w) => w.key === d);
-                    return f ? f.label : d;
-                })
-                .join(", ")
-            : "jour (non précisé)";
-        return `${EVERY}semaine${Number(interval) > 1 ? "s" : ""}${byday.length ? `, ${days}` : ""}${_endClause(until, count)}`;
-    }
-    if (freq === "MONTHLY") {
-        const d = bymonthday ? `le ${bymonthday}` : "jour (non précisé)";
-        return `${EVERY}mois, ${d}${_endClause(until, count)}`;
-    }
-    if (freq === "DAILY") {
-        return `${EVERY}jour${Number(interval) > 1 ? "s" : ""}${_endClause(until, count)}`;
-    }
-    if (freq === "YEARLY") {
-        return `${EVERY}an${Number(interval) > 1 ? "s" : ""}${_endClause(until, count)}`;
-    }
-    return "Récurrence personnalisée.";
+    const freq = map.FREQ || "NONE";
+    const interval = map.INTERVAL ? Number(map.INTERVAL) || 1 : 1;
+    const byMonthDay = map.BYMONTHDAY ? Number(map.BYMONTHDAY) || "" : "";
+    const byMonth = map.BYMONTH ? Number(map.BYMONTH) || "" : "";
+    const byDay = map.BYDAY ? map.BYDAY.split(",").map((s) => s.trim()).filter(Boolean) : [];
+
+    return { freq, interval, byDay, byMonthDay, byMonth };
 }
-function _endClause(until, count) {
-    if (count && Number(count) > 0) return `, ${count} occurrence${Number(count) > 1 ? "s" : ""}`;
-    if (until) return `, jusqu’au ${_formatFR(until)}`;
-    return "";
-}
-function _formatFR(iso) {
-    try {
-        const d = new Date(iso);
-        return d.toLocaleDateString("fr-FR", { year: "numeric", month: "2-digit", day: "2-digit" });
-    } catch {
-        return iso;
+
+function rruleSummary(rrule) {
+    if (!rrule) return "Aucune répétition.";
+    const { freq, interval, byDay, byMonthDay, byMonth } = parseRRule(rrule);
+    const every = interval > 1 ? `toutes les ${interval} ` : "chaque ";
+
+    switch (freq) {
+        case "DAILY":
+            return interval > 1 ? `Récurrente ${every}jours.` : "Tous les jours.";
+        case "WEEKLY": {
+            const days = byDay.length
+                ? byDay
+                    .map((d) => RR_WEEKDAYS.find((x) => x.v === d)?.label || d)
+                    .join(", ")
+                : "jour de la semaine initial";
+            return `${every}semaine${interval > 1 ? "s" : ""} (${days}).`;
+        }
+        case "MONTHLY":
+            return byMonthDay
+                ? `${every}mois (le ${byMonthDay}).`
+                : `${every}mois.`;
+        case "YEARLY": {
+            const mLabel = byMonth ? (MONTHS.find((m) => m.v === Number(byMonth))?.label || `Mois ${byMonth}`) : "mois initial";
+            const dLabel = byMonthDay ? ` le ${byMonthDay}` : "";
+            return `${every}an${interval > 1 ? "s" : ""} (${mLabel}${dLabel}).`;
+        }
+        default:
+            return "Répétition personnalisée.";
     }
 }
+
+/* ---------- Composant: RRuleBuilder (UI) ---------- */
+function RRuleBuilder({ value, onChange }) {
+    // value est la string RRULE, on garde un état UI dérivé
+    const [ui, setUi] = useState(() => parseRRule(value));
+
+    // sync quand value change de l’extérieur (ex: chargement en edit)
+    useEffect(() => {
+        setUi(parseRRule(value));
+    }, [value]);
+
+    // recalculer la RRULE à chaque modif UI
+    useEffect(() => {
+        const r = buildRRuleFromUi(ui);
+        onChange?.(r);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [ui.freq, ui.interval, JSON.stringify(ui.byDay), ui.byMonthDay, ui.byMonth]);
+
+    const freq = ui.freq || "NONE";
+
+    return (
+        <div className="border rounded-lg p-3 space-y-3">
+            <div className="text-sm opacity-70 mb-1">Répétition (optionnel)</div>
+
+            <div className="grid md:grid-cols-2 gap-3">
+                <label className="text-sm">
+                    <div className="mb-1 opacity-70">Fréquence</div>
+                    <select
+                        className="border rounded px-2 py-1 w-full"
+                        value={freq}
+                        onChange={(e) => setUi((u) => ({ ...u, freq: e.target.value }))}
+                    >
+                        <option value="NONE">Aucune</option>
+                        <option value="DAILY">Tous les jours</option>
+                        <option value="WEEKLY">Chaque semaine</option>
+                        <option value="MONTHLY">Chaque mois</option>
+                        <option value="YEARLY">Chaque année</option>
+                    </select>
+                </label>
+
+                {freq !== "NONE" && (
+                    <label className="text-sm">
+                        <div className="mb-1 opacity-70">Intervalle</div>
+                        <input
+                            type="number"
+                            min={1}
+                            className="border rounded px-2 py-1 w-full"
+                            value={ui.interval ?? 1}
+                            onChange={(e) => setUi((u) => ({ ...u, interval: Math.max(1, Number(e.target.value || 1)) }))}
+                        />
+                        <div className="text-xs opacity-70 mt-1">
+                            Exemple : <b>2</b> = toutes les 2 semaines / tous les 2 mois…
+                        </div>
+                    </label>
+                )}
+            </div>
+
+            {/* Options spécifiques selon la fréquence */}
+            {freq === "WEEKLY" && (
+                <div className="text-sm">
+                    <div className="mb-1 opacity-70">Jours de la semaine</div>
+                    <div className="flex flex-wrap gap-2">
+                        {RR_WEEKDAYS.map((d) => {
+                            const active = (ui.byDay || []).includes(d.v);
+                            return (
+                                <button
+                                    key={d.v}
+                                    type="button"
+                                    onClick={() =>
+                                        setUi((u) => {
+                                            const set = new Set(u.byDay || []);
+                                            if (set.has(d.v)) set.delete(d.v);
+                                            else set.add(d.v);
+                                            return { ...u, byDay: Array.from(set) };
+                                        })
+                                    }
+                                    className={`px-2 py-1 rounded border text-sm ${
+                                        active ? "bg-emerald-600 text-white border-emerald-600" : ""
+                                    }`}
+                                >
+                                    {d.label}
+                                </button>
+                            );
+                        })}
+                    </div>
+                    <div className="text-xs opacity-70 mt-1">
+                        Laissez vide pour “même jour que la date choisie”.
+                    </div>
+                </div>
+            )}
+
+            {freq === "MONTHLY" && (
+                <label className="text-sm">
+                    <div className="mb-1 opacity-70">Jour du mois</div>
+                    <input
+                        type="number"
+                        min={1}
+                        max={31}
+                        className="border rounded px-2 py-1 w-full"
+                        value={ui.byMonthDay || ""}
+                        onChange={(e) => setUi((u) => ({ ...u, byMonthDay: e.target.value ? Number(e.target.value) : "" }))}
+                        placeholder="ex. 1 (le 1er du mois)"
+                    />
+                    <div className="text-xs opacity-70 mt-1">Laissez vide pour “même jour numérique que la date choisie”.</div>
+                </label>
+            )}
+
+            {freq === "YEARLY" && (
+                <div className="grid md:grid-cols-2 gap-3">
+                    <label className="text-sm">
+                        <div className="mb-1 opacity-70">Mois</div>
+                        <select
+                            className="border rounded px-2 py-1 w-full"
+                            value={ui.byMonth || ""}
+                            onChange={(e) =>
+                                setUi((u) => ({ ...u, byMonth: e.target.value ? Number(e.target.value) : "" }))
+                            }
+                        >
+                            <option value="">— Même mois que la date —</option>
+                            {MONTHS.map((m) => (
+                                <option key={m.v} value={m.v}>
+                                    {m.label}
+                                </option>
+                            ))}
+                        </select>
+                    </label>
+
+                    <label className="text-sm">
+                        <div className="mb-1 opacity-70">Jour du mois</div>
+                        <input
+                            type="number"
+                            min={1}
+                            max={31}
+                            className="border rounded px-2 py-1 w-full"
+                            value={ui.byMonthDay || ""}
+                            onChange={(e) => setUi((u) => ({ ...u, byMonthDay: e.target.value ? Number(e.target.value) : "" }))}
+                            placeholder="ex. 15 (le 15 du mois)"
+                        />
+                        <div className="text-xs opacity-70 mt-1">Laissez vide pour “même jour numérique que la date”.</div>
+                    </label>
+                </div>
+            )}
+
+            {/* Résumé humain */}
+            <div className="text-xs px-3 py-2 rounded bg-slate-50 text-slate-700">
+                {rruleSummary(buildRRuleFromUi(ui))}
+            </div>
+
+            {/* Avancé (texte brut RRULE) */}
+            <details className="text-sm">
+                <summary className="cursor-pointer select-none">Avancé (texte RRULE)</summary>
+                <div className="mt-2">
+                    <input
+                        className="border rounded px-2 py-1 w-full"
+                        value={value || ""}
+                        onChange={(e) => onChange?.(e.target.value)}
+                        placeholder="Ex. FREQ=WEEKLY;BYDAY=TU"
+                    />
+                    <div className="text-xs opacity-70 mt-1">
+                        Laissez vide pour aucune répétition. Les formats standard iCal sont acceptés (FREQ, BYDAY, BYMONTHDAY…).
+                    </div>
+                </div>
+            </details>
+        </div>
+    );
+}
+
+/* ---------- Formulaire principal ---------- */
 
 export default function EventForm({ mode }) {
     const { id } = useParams();
@@ -249,17 +444,6 @@ export default function EventForm({ mode }) {
         supplier_deadline_days: 14,
     });
 
-    // Assistant de récurrence (UI -> RRULE)
-    const [rruleUI, setRruleUI] = useState({
-        enabled: false,
-        freq: "", // "", "DAILY", "WEEKLY", "MONTHLY", "YEARLY"
-        interval: 1,
-        byday: [], // ["MO","WE"] si weekly
-        bymonthday: "", // "1".."31" si monthly
-        until: "", // "YYYY-MM-DD"
-        count: "", // nombre d’occurrences
-    });
-
     // sync restaurant id si l’actif change
     useEffect(() => {
         setForm((f) => ({ ...f, restaurant: activeRestaurantId || "" }));
@@ -292,29 +476,6 @@ export default function EventForm({ mode }) {
                     supplier_deadline_days:
                         typeof d.supplier_deadline_days === "number" ? d.supplier_deadline_days : 14,
                 });
-
-                // essaie d’hydrater l’assistant depuis une RRULE existante (lecture simple)
-                try {
-                    const r = (d.rrule || "").split(";").reduce((acc, part) => {
-                        const [k, v] = part.split("=");
-                        if (!k || !v) return acc;
-                        acc[k.trim().toUpperCase()] = v.trim();
-                        return acc;
-                    }, {});
-                    const ui = {
-                        enabled: !!d.rrule,
-                        freq: r.FREQ || "",
-                        interval: r.INTERVAL ? Number(r.INTERVAL) : 1,
-                        byday: r.BYDAY ? r.BYDAY.split(",") : [],
-                        bymonthday: r.BYMONTHDAY || "",
-                        until: r.UNTIL ? `${r.UNTIL.slice(0, 4)}-${r.UNTIL.slice(4, 6)}-${r.UNTIL.slice(6, 8)}` : "",
-                        count: r.COUNT || "",
-                    };
-                    setRruleUI(ui);
-                } catch {
-                    // ignore si parsing rrule échoue
-                }
-
                 if (regs && typeof regs.count === "number") setRegistrationsCount(regs.count);
             })
             .catch((e) => setApiError(e))
@@ -533,218 +694,61 @@ export default function EventForm({ mode }) {
                     <FieldError errors={fieldErrors?.room} />
                 </Field>
 
-                {/* ---------- RRULE (optionnel) + Assistant visuel ---------- */}
+                {/* ---- RRULE INTERACTIF ---- */}
                 <div className="md:col-span-2">
-                    <div className="flex items-center justify-between">
-                        <label className={`text-sm ${fieldErrors?.rrule ? "text-red-700" : "opacity-70"}`}>
-                            RRULE (optionnel)
-                        </label>
-                        <label className="text-sm flex items-center gap-2">
-                            <input
-                                type="checkbox"
-                                checked={!!rruleUI.enabled}
-                                onChange={(e) => {
-                                    const enabled = e.target.checked;
-                                    setRruleUI((u) => ({ ...u, enabled }));
-                                    if (!enabled) return;
-                                    setRruleUI((u) => ({
-                                        ...u,
-                                        freq: u.freq || "WEEKLY",
-                                        interval: u.interval || 1,
-                                    }));
-                                }}
-                            />
-                            Assistant de récurrence
-                        </label>
-                    </div>
-
-                    {/* Champ texte RRULE (toujours éditable) */}
-                    <input
-                        className={`border rounded px-2 py-1 w-full mt-1 ${fieldErrors?.rrule ? "border-red-500" : ""}`}
-                        placeholder="ex. FREQ=WEEKLY;BYDAY=TU"
+                    <RRuleBuilder
                         value={form.rrule}
-                        onChange={(e) => {
-                            const value = e.target.value;
-                            setForm((f) => ({ ...f, rrule: value }));
-                        }}
+                        onChange={(val) => setForm((f) => ({ ...f, rrule: val || "" }))}
                     />
                     <FieldError errors={fieldErrors?.rrule} />
-
-                    {/* Assistant visuel */}
-                    {rruleUI.enabled && (
-                        <div className="mt-3 p-3 border rounded-xl bg-slate-50 space-y-3">
-                            {/* Fréquence + intervalle + fin */}
-                            <div className="grid md:grid-cols-3 gap-3">
-                                <label className="text-sm">
-                                    <div className="opacity-70 mb-1">Fréquence</div>
-                                    <select
-                                        className="border rounded px-2 py-1 w-full"
-                                        value={rruleUI.freq}
-                                        onChange={(e) =>
-                                            setRruleUI((u) => {
-                                                const next = { ...u, freq: e.target.value };
-                                                // reset champs spécifiques
-                                                if (e.target.value !== "WEEKLY") next.byday = [];
-                                                if (e.target.value !== "MONTHLY") next.bymonthday = "";
-                                                const r = buildRRule(next);
-                                                setForm((f) => ({ ...f, rrule: r }));
-                                                return next;
-                                            })
-                                        }
-                                    >
-                                        <option value="">—</option>
-                                        <option value="DAILY">Quotidienne</option>
-                                        <option value="WEEKLY">Hebdomadaire</option>
-                                        <option value="MONTHLY">Mensuelle</option>
-                                        <option value="YEARLY">Annuelle</option>
-                                    </select>
-                                </label>
-
-                                <label className="text-sm">
-                                    <div className="opacity-70 mb-1">Intervalle</div>
-                                    <input
-                                        type="number"
-                                        min={1}
-                                        className="border rounded px-2 py-1 w-full"
-                                        value={rruleUI.interval}
-                                        onChange={(e) =>
-                                            setRruleUI((u) => {
-                                                const next = { ...u, interval: Number(e.target.value || 1) };
-                                                const r = buildRRule(next);
-                                                setForm((f) => ({ ...f, rrule: r }));
-                                                return next;
-                                            })
-                                        }
-                                    />
-                                </label>
-
-                                <div className="text-sm">
-                                    <div className="opacity-70 mb-1">Fin (au choix)</div>
-                                    <div className="grid grid-cols-2 gap-2">
-                                        <input
-                                            type="date"
-                                            className="border rounded px-2 py-1 w-full"
-                                            value={rruleUI.until}
-                                            onChange={(e) =>
-                                                setRruleUI((u) => {
-                                                    const next = { ...u, until: e.target.value, count: "" };
-                                                    const r = buildRRule(next);
-                                                    setForm((f) => ({ ...f, rrule: r }));
-                                                    return next;
-                                                })
-                                            }
-                                        />
-                                        <input
-                                            type="number"
-                                            min={1}
-                                            placeholder="Count"
-                                            className="border rounded px-2 py-1 w-full"
-                                            value={rruleUI.count}
-                                            onChange={(e) =>
-                                                setRruleUI((u) => {
-                                                    const next = { ...u, count: e.target.value, until: "" };
-                                                    const r = buildRRule(next);
-                                                    setForm((f) => ({ ...f, rrule: r }));
-                                                    return next;
-                                                })
-                                            }
-                                        />
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Jours (si WEEKLY) */}
-                            {rruleUI.freq === "WEEKLY" && (
-                                <div className="text-sm">
-                                    <div className="opacity-70 mb-1">Jours</div>
-                                    <div className="flex flex-wrap gap-2">
-                                        {WEEKDAYS.map((d) => {
-                                            const active = rruleUI.byday.includes(d.key);
-                                            return (
-                                                <button
-                                                    type="button"
-                                                    key={d.key}
-                                                    onClick={() =>
-                                                        setRruleUI((u) => {
-                                                            const set = new Set(u.byday);
-                                                            if (set.has(d.key)) set.delete(d.key);
-                                                            else set.add(d.key);
-                                                            const next = { ...u, byday: Array.from(set) };
-                                                            const r = buildRRule(next);
-                                                            setForm((f) => ({ ...f, rrule: r }));
-                                                            return next;
-                                                        })
-                                                    }
-                                                    className={`px-3 py-1 rounded-full border text-xs ${
-                                                        active ? "bg-emerald-100 border-emerald-300" : "bg-white"
-                                                    }`}
-                                                >
-                                                    {d.label}
-                                                </button>
-                                            );
-                                        })}
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* Jour du mois (si MONTHLY) */}
-                            {rruleUI.freq === "MONTHLY" && (
-                                <label className="text-sm">
-                                    <div className="opacity-70 mb-1">Jour du mois</div>
-                                    <input
-                                        type="number"
-                                        min={1}
-                                        max={31}
-                                        className="border rounded px-2 py-1 w-full"
-                                        value={rruleUI.bymonthday}
-                                        onChange={(e) =>
-                                            setRruleUI((u) => {
-                                                const v = e.target.value;
-                                                const next = { ...u, bymonthday: v };
-                                                const r = buildRRule(next);
-                                                setForm((f) => ({ ...f, rrule: r }));
-                                                return next;
-                                            })
-                                        }
-                                    />
-                                </label>
-                            )}
-
-                            {/* Résumé humain */}
-                            <div className="text-xs px-3 py-2 rounded bg-white border">
-                                {humanizeRRule(rruleUI.freq ? rruleUI : { freq: "", interval: 1 })}
-                            </div>
-
-                            {/* Presets rapides */}
-                            <div className="flex flex-wrap gap-2">
-                                <PresetButton
-                                    label="Chaque mardi"
-                                    r={{ freq: "WEEKLY", interval: 1, byday: ["TU"], until: "", count: "" }}
-                                    apply={(r) => {
-                                        setRruleUI((u) => ({ ...u, enabled: true, ...r }));
-                                        setForm((f) => ({ ...f, rrule: buildRRule(r) }));
-                                    }}
-                                />
-                                <PresetButton
-                                    label="Tous les 1ers du mois"
-                                    r={{ freq: "MONTHLY", interval: 1, bymonthday: "1", until: "", count: "" }}
-                                    apply={(r) => {
-                                        setRruleUI((u) => ({ ...u, enabled: true, ...r }));
-                                        setForm((f) => ({ ...f, rrule: buildRRule(r) }));
-                                    }}
-                                />
-                                <PresetButton
-                                    label="Quotidien (10 fois)"
-                                    r={{ freq: "DAILY", interval: 1, count: "10", until: "" }}
-                                    apply={(r) => {
-                                        setRruleUI((u) => ({ ...u, enabled: true, ...r }));
-                                        setForm((f) => ({ ...f, rrule: buildRRule(r) }));
-                                    }}
-                                />
-                            </div>
-                        </div>
-                    )}
                 </div>
+
+                {/* Producteurs */}
+                <label className="flex items-center gap-2 text-sm">
+                    <input
+                        type="checkbox"
+                        checked={!!form.requires_supplier_confirmation}
+                        onChange={(e) =>
+                            setForm((f) => ({ ...f, requires_supplier_confirmation: e.target.checked }))
+                        }
+                    />
+                    Confirmation producteurs requise ?
+                </label>
+
+                <Field label="Délai (jours) avant la date (producteurs)" hasError={!!fieldErrors?.supplier_deadline_days}>
+                    <input
+                        type="number"
+                        min={0}
+                        className={`border rounded px-2 py-1 w-full ${
+                            fieldErrors?.supplier_deadline_days ? "border-red-500" : ""
+                        }`}
+                        value={form.supplier_deadline_days}
+                        onChange={(e) =>
+                            setForm((f) => ({ ...f, supplier_deadline_days: Number(e.target.value || 0) }))
+                        }
+                        disabled={!form.requires_supplier_confirmation}
+                    />
+                    <FieldError errors={fieldErrors?.supplier_deadline_days} />
+                </Field>
+
+                {/* Booleans */}
+                <label className="flex items-center gap-2 text-sm">
+                    <input
+                        type="checkbox"
+                        checked={!!form.is_public}
+                        onChange={(e) => setForm((f) => ({ ...f, is_public: e.target.checked }))}
+                    />
+                    Public
+                </label>
+
+                <label className="flex items-center gap-2 text-sm">
+                    <input
+                        type="checkbox"
+                        checked={!!form.is_blocking}
+                        onChange={(e) => setForm((f) => ({ ...f, is_blocking: e.target.checked }))}
+                    />
+                    Bloquant (bloque les réservations sur ce créneau)
+                </label>
 
                 {/* Description */}
                 <Field label="Description" full hasError={!!fieldErrors?.description}>
@@ -787,18 +791,5 @@ function Field({ label, children, full, hasError }) {
             <div className={`mb-1 ${hasError ? "text-red-700" : "opacity-70"}`}>{label}</div>
             {children}
         </label>
-    );
-}
-
-function PresetButton({ label, r, apply }) {
-    return (
-        <button
-            type="button"
-            onClick={() => apply(r)}
-            className="text-xs px-3 py-1 rounded border hover:bg-slate-100"
-            title="Appliquer un exemple de récurrence"
-        >
-            {label}
-        </button>
     );
 }
