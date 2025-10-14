@@ -166,11 +166,11 @@ export default function OffersList(){
             {compareSel.length>0 && (
                 <div className="bg-white text-black border rounded-2xl p-3 flex items-center justify-between">
                     <div className="text-sm">
-                        {compareSel.length} sélection(s) pour comparaison (max 4).
+                        {compareSel.length} sélection(s) (max 4).
                     </div>
                     <div className="flex gap-2">
                         <button className="px-3 py-2 rounded bg-blue-600 hover:bg-blue-500"
-                                onClick={doCompare}>Comparer</button>
+                                onClick={doCompare}>Sélectionner</button>
                         <button className="px-3 py-2 rounded border" onClick={clearCompare}>Vider</button>
                     </div>
                 </div>
@@ -210,7 +210,7 @@ export default function OffersList(){
                             ))}
                             </tbody>
                         </table>
-                    ) : <Empty>Aucune donnée à comparer.</Empty>}
+                    ) : <Empty>Aucune donnée à sélectionner.</Empty>}
                 </div>
             )}
 
@@ -224,7 +224,7 @@ export default function OffersList(){
                                     <div className="font-medium">{o.product_name}</div>
                                     <label className="text-xs inline-flex items-center gap-2">
                                         <input type="checkbox" checked={compareSel.includes(o.id)} onChange={()=> toggleCompare(o.id)} />
-                                        Comparer
+                                        Sélectionner
                                     </label>
                                 </div>
                                 <div className="text-xs opacity-70 mb-2">#{o.id} • {o.region} • {o.unit}</div>

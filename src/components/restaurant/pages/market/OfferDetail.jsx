@@ -213,13 +213,7 @@ export default function OfferDetail(){
                         <div className="mt-2 text-sm whitespace-pre-wrap">{offer.description}</div>
                     )}
 
-                    {/* Actions */}
-                    <div className="flex flex-wrap gap-2">
-                        <button className="px-3 py-2 rounded bg-blue-600 hover:bg-blue-500" onClick={onFlag}>Signaler</button>
-                        <button className="px-3 py-2 rounded bg-slate-700 hover:bg-slate-600" onClick={onImportProduct}>
-                            Importer en produit (menu)
-                        </button>
-                    </div>
+
 
                     {/* Commander */}
                     <section className="border rounded-xl p-3">
