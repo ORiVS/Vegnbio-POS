@@ -64,7 +64,6 @@ function ErrorBanner({ error, onClose }) {
         </div>
     );
 }
-// erreurs par champ (inline)
 function extractFieldErrors(data) {
     const out = {};
     if (!data || typeof data !== "object") return out;
@@ -86,13 +85,7 @@ function FieldError({ errors }) {
 /* ---------- Domain helpers ---------- */
 const TYPES = ["ANNIVERSAIRE", "CONFERENCE", "SEMINAIRE", "ANIMATION", "AUTRE"];
 
-// RRULE helpers
-const WEEKDAYS = [
-    { v: "MO", label: "Lundi" },
-    { v: "TU", label: "Mardi" },
-    { v: "WE", label: "Mercredi" }, // volontairement "WE" ? Non → corrigeons :
-];
-// Petite correction : vrai tableau pour RRULE (MO,TU,WE,TH,FR,SA,SU)
+// Jours pour RRULE
 const RR_WEEKDAYS = [
     { v: "MO", label: "Lundi" },
     { v: "TU", label: "Mardi" },
@@ -119,12 +112,10 @@ const MONTHS = [
 ];
 
 function weekdayFromISO(dateStr) {
-    // 0=Mon … 6=Sun to match Python weekday()
     try {
         const d = new Date(dateStr);
-        // JS: 0=Sun … 6=Sat ; convert to Python style
-        const js = d.getDay(); // 0..6
-        return (js + 6) % 7;
+        const js = d.getDay(); // 0..6 (Sun..Sat)
+        return (js + 6) % 7;   // 0..6 (Mon..Sun)
     } catch {
         return null;
     }
@@ -147,29 +138,22 @@ function timeToMinutes(hhmm) {
     return h * 60 + (m || 0);
 }
 function isWithinOpening(meta, dateISO, start, end) {
-    // approximation front qui imite le back (overnight inclus)
     const wd = weekdayFromISO(dateISO);
     const today = getOpenCloseForWeekday(meta, wd);
-    if (!today) return true; // pas bloquant côté front
+    if (!today) return true;
     const o = timeToMinutes(today.open);
     const c = timeToMinutes(today.close);
     const st = timeToMinutes(start);
     const et = timeToMinutes(end);
     if ([o, c, st, et].some((x) => isNaN(x))) return true;
 
-    if (c > o) {
-        // journée normale
-        return st >= o && et <= c;
-    }
-    // overnight (ex: 09:00 → 01:00)
-    // on autorise soit dans [open..23:59], soit [00:00..close]
+    if (c > o) return st >= o && et <= c;
     const inToday = st >= o && et <= (24 * 60 - 1);
     const inPrevSpill = st >= 0 && et <= c;
     return inToday || inPrevSpill;
 }
 
-/* ---------- RRULE <-> UI: builder & parser simples ---------- */
-
+/* ---------- RRULE <-> UI ---------- */
 function buildRRuleFromUi({ freq, interval, byDay, byMonthDay, byMonth }) {
     if (freq === "NONE") return "";
     const parts = [`FREQ=${freq}`];
@@ -192,8 +176,6 @@ function buildRRuleFromUi({ freq, interval, byDay, byMonthDay, byMonth }) {
     }
     return parts.join(";");
 }
-
-// Parser très simple pour pré-remplir l’UI en mode edit (couvre 80% des cas)
 function parseRRule(rrule) {
     const def = { freq: "NONE", interval: 1, byDay: [], byMonthDay: "", byMonth: "" };
     if (!rrule || typeof rrule !== "string") return def;
@@ -212,7 +194,6 @@ function parseRRule(rrule) {
 
     return { freq, interval, byDay, byMonthDay, byMonth };
 }
-
 function rruleSummary(rrule) {
     if (!rrule) return "Aucune répétition.";
     const { freq, interval, byDay, byMonthDay, byMonth } = parseRRule(rrule);
@@ -223,16 +204,12 @@ function rruleSummary(rrule) {
             return interval > 1 ? `Récurrente ${every}jours.` : "Tous les jours.";
         case "WEEKLY": {
             const days = byDay.length
-                ? byDay
-                    .map((d) => RR_WEEKDAYS.find((x) => x.v === d)?.label || d)
-                    .join(", ")
+                ? byDay.map((d) => RR_WEEKDAYS.find((x) => x.v === d)?.label || d).join(", ")
                 : "jour de la semaine initial";
             return `${every}semaine${interval > 1 ? "s" : ""} (${days}).`;
         }
         case "MONTHLY":
-            return byMonthDay
-                ? `${every}mois (le ${byMonthDay}).`
-                : `${every}mois.`;
+            return byMonthDay ? `${every}mois (le ${byMonthDay}).` : `${every}mois.`;
         case "YEARLY": {
             const mLabel = byMonth ? (MONTHS.find((m) => m.v === Number(byMonth))?.label || `Mois ${byMonth}`) : "mois initial";
             const dLabel = byMonthDay ? ` le ${byMonthDay}` : "";
@@ -243,17 +220,20 @@ function rruleSummary(rrule) {
     }
 }
 
-/* ---------- Composant: RRuleBuilder (UI) ---------- */
+/* ---------- Styles de champ communs ---------- */
+const fieldBase =
+    "border rounded px-2 py-1 w-full bg-gray-50 text-gray-900 placeholder-gray-400 " +
+    "focus:bg-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200";
+const fieldErr = `${fieldBase} border-red-500`;
+
+/* ---------- RRuleBuilder UI ---------- */
 function RRuleBuilder({ value, onChange }) {
-    // value est la string RRULE, on garde un état UI dérivé
     const [ui, setUi] = useState(() => parseRRule(value));
 
-    // sync quand value change de l’extérieur (ex: chargement en edit)
     useEffect(() => {
         setUi(parseRRule(value));
     }, [value]);
 
-    // recalculer la RRULE à chaque modif UI
     useEffect(() => {
         const r = buildRRuleFromUi(ui);
         onChange?.(r);
@@ -270,7 +250,7 @@ function RRuleBuilder({ value, onChange }) {
                 <label className="text-sm">
                     <div className="mb-1 opacity-70">Fréquence</div>
                     <select
-                        className="border rounded px-2 py-1 w-full bg-gray-50 text-gray-900 placeholder-gray-400 focus:bg-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200"
+                        className={fieldBase}
                         value={freq}
                         onChange={(e) => setUi((u) => ({ ...u, freq: e.target.value }))}
                     >
@@ -288,7 +268,7 @@ function RRuleBuilder({ value, onChange }) {
                         <input
                             type="number"
                             min={1}
-                            className="border rounded px-2 py-1 w-full bg-gray-50 text-gray-900 placeholder-gray-400 focus:bg-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200"
+                            className={fieldBase}
                             value={ui.interval ?? 1}
                             onChange={(e) => setUi((u) => ({ ...u, interval: Math.max(1, Number(e.target.value || 1)) }))}
                         />
@@ -299,7 +279,6 @@ function RRuleBuilder({ value, onChange }) {
                 )}
             </div>
 
-            {/* Options spécifiques selon la fréquence */}
             {freq === "WEEKLY" && (
                 <div className="text-sm">
                     <div className="mb-1 opacity-70">Jours de la semaine</div>
@@ -327,9 +306,7 @@ function RRuleBuilder({ value, onChange }) {
                             );
                         })}
                     </div>
-                    <div className="text-xs opacity-70 mt-1">
-                        Laissez vide pour “même jour que la date choisie”.
-                    </div>
+                    <div className="text-xs opacity-70 mt-1">Laissez vide pour “même jour que la date choisie”.</div>
                 </div>
             )}
 
@@ -340,12 +317,14 @@ function RRuleBuilder({ value, onChange }) {
                         type="number"
                         min={1}
                         max={31}
-                        className="border rounded px-2 py-1 w-full bg-gray-50 text-gray-900 placeholder-gray-400 focus:bg-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200"
+                        className={fieldBase}
                         value={ui.byMonthDay || ""}
                         onChange={(e) => setUi((u) => ({ ...u, byMonthDay: e.target.value ? Number(e.target.value) : "" }))}
                         placeholder="ex. 1 (le 1er du mois)"
                     />
-                    <div className="text-xs opacity-70 mt-1">Laissez vide pour “même jour numérique que la date choisie”.</div>
+                    <div className="text-xs opacity-70 mt-1">
+                        Laissez vide pour “même jour numérique que la date choisie”.
+                    </div>
                 </label>
             )}
 
@@ -354,11 +333,9 @@ function RRuleBuilder({ value, onChange }) {
                     <label className="text-sm">
                         <div className="mb-1 opacity-70">Mois</div>
                         <select
-                            className="border rounded px-2 py-1 w-full bg-gray-50 text-gray-900 placeholder-gray-400 focus:bg-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200"
+                            className={fieldBase}
                             value={ui.byMonth || ""}
-                            onChange={(e) =>
-                                setUi((u) => ({ ...u, byMonth: e.target.value ? Number(e.target.value) : "" }))
-                            }
+                            onChange={(e) => setUi((u) => ({ ...u, byMonth: e.target.value ? Number(e.target.value) : "" }))}
                         >
                             <option value="">— Même mois que la date —</option>
                             {MONTHS.map((m) => (
@@ -375,7 +352,7 @@ function RRuleBuilder({ value, onChange }) {
                             type="number"
                             min={1}
                             max={31}
-                            className="border rounded px-2 py-1 w-full bg-gray-50 text-gray-900 placeholder-gray-400 focus:bg-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200"
+                            className={fieldBase}
                             value={ui.byMonthDay || ""}
                             onChange={(e) => setUi((u) => ({ ...u, byMonthDay: e.target.value ? Number(e.target.value) : "" }))}
                             placeholder="ex. 15 (le 15 du mois)"
@@ -385,7 +362,6 @@ function RRuleBuilder({ value, onChange }) {
                 </div>
             )}
 
-            {/* Résumé humain */}
             <div className="text-xs px-3 py-2 rounded bg-slate-50 text-slate-700">
                 {rruleSummary(buildRRuleFromUi(ui))}
             </div>
@@ -394,7 +370,6 @@ function RRuleBuilder({ value, onChange }) {
 }
 
 /* ---------- Formulaire principal ---------- */
-
 export default function EventForm({ mode }) {
     const { id } = useParams();
     const edit = mode === "edit";
@@ -405,10 +380,9 @@ export default function EventForm({ mode }) {
     const [apiError, setApiError] = useState(null);
     const [fieldErrors, setFieldErrors] = useState({});
 
-    // meta resto (rooms + horaires)
     const [restaurantMeta, setRestaurantMeta] = useState(null);
     const [rooms, setRooms] = useState([]);
-    const [registrationsCount, setRegistrationsCount] = useState(null); // pour hint capacité en edit
+    const [registrationsCount, setRegistrationsCount] = useState(null);
 
     const [form, setForm] = useState({
         restaurant: activeRestaurantId || "",
@@ -423,17 +397,14 @@ export default function EventForm({ mode }) {
         is_blocking: false,
         room: "",
         rrule: "",
-        // --- producteurs ---
         requires_supplier_confirmation: false,
         supplier_deadline_days: 14,
     });
 
-    // sync restaurant id si l’actif change
     useEffect(() => {
         setForm((f) => ({ ...f, restaurant: activeRestaurantId || "" }));
     }, [activeRestaurantId]);
 
-    // charger event si edit
     useEffect(() => {
         if (!edit || !id) return;
         let alive = true;
@@ -457,8 +428,7 @@ export default function EventForm({ mode }) {
                     room: d.room ?? "",
                     rrule: d.rrule || "",
                     requires_supplier_confirmation: !!d.requires_supplier_confirmation,
-                    supplier_deadline_days:
-                        typeof d.supplier_deadline_days === "number" ? d.supplier_deadline_days : 14,
+                    supplier_deadline_days: typeof d.supplier_deadline_days === "number" ? d.supplier_deadline_days : 14,
                 });
                 if (regs && typeof regs.count === "number") setRegistrationsCount(regs.count);
             })
@@ -469,7 +439,6 @@ export default function EventForm({ mode }) {
         };
     }, [edit, id]);
 
-    // charger meta (rooms + horaires) quand restaurant change
     useEffect(() => {
         const rid = form.restaurant;
         if (!rid) {
@@ -494,7 +463,6 @@ export default function EventForm({ mode }) {
         };
     }, [form.restaurant]);
 
-    // ouverture/fermeture du jour (hint)
     const openingHint = useMemo(() => {
         if (!restaurantMeta || !form.date) return null;
         const wd = weekdayFromISO(form.date);
@@ -508,21 +476,18 @@ export default function EventForm({ mode }) {
         };
     }, [restaurantMeta, form.date]);
 
-    // submit
     const onSubmit = async (e) => {
         e.preventDefault();
         try {
             setApiError(null);
             setFieldErrors({});
 
-            // pré-validation simple horaires (évite un aller-retour)
             if (restaurantMeta && form.date && form.start_time && form.end_time) {
                 if (!isWithinOpening(restaurantMeta, form.date, form.start_time, form.end_time)) {
                     throw new Error("Créneau hors horaires d’ouverture du restaurant.");
                 }
             }
 
-            // capacité vs inscrits (edit only, côté front)
             if (edit && registrationsCount != null && form.capacity !== "") {
                 const cap = Number(form.capacity);
                 if (Number.isFinite(cap) && cap < Number(registrationsCount || 0)) {
@@ -563,7 +528,6 @@ export default function EventForm({ mode }) {
         <div className="p-6 space-y-4">
             <h1 className="text-2xl font-semibold">{edit ? "Éditer l’évènement" : "Créer un évènement"}</h1>
 
-            {/* Banderole globale */}
             {apiError && <ErrorBanner error={apiError} onClose={() => setApiError(null)} />}
 
             {loading && <Loading />}
@@ -576,31 +540,33 @@ export default function EventForm({ mode }) {
                     <FieldError errors={fieldErrors?.non_field_errors} />
                 </div>
 
-                {/* Restaurant ID (simple, lié à l'actif) */}
+                {/* Restaurant ID */}
                 <Field label="Restaurant ID" hasError={!!fieldErrors?.restaurant}>
                     <input
                         required
                         type="number"
-                        className={`border rounded px-2 py-1 w-full ${fieldErrors?.restaurant ? "border-red-500" : ""}`}
+                        className={fieldErrors?.restaurant ? fieldErr : fieldBase}
                         value={form.restaurant}
                         onChange={(e) => setForm((f) => ({ ...f, restaurant: e.target.value, room: "" }))}
                     />
                     <FieldError errors={fieldErrors?.restaurant} />
                 </Field>
 
+                {/* Titre */}
                 <Field label="Titre" hasError={!!fieldErrors?.title}>
                     <input
                         required
-                        className={`border rounded px-2 py-1 w-full ${fieldErrors?.title ? "border-red-500" : ""}`}
+                        className={fieldErrors?.title ? fieldErr : fieldBase}
                         value={form.title}
                         onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
                     />
                     <FieldError errors={fieldErrors?.title} />
                 </Field>
 
+                {/* Type */}
                 <Field label="Type" hasError={!!fieldErrors?.type}>
                     <select
-                        className={`border rounded px-2 py-1 w-full ${fieldErrors?.type ? "border-red-500" : ""}`}
+                        className={fieldErrors?.type ? fieldErr : fieldBase}
                         value={form.type}
                         onChange={(e) => setForm((f) => ({ ...f, type: e.target.value }))}
                     >
@@ -613,44 +579,48 @@ export default function EventForm({ mode }) {
                     <FieldError errors={fieldErrors?.type} />
                 </Field>
 
+                {/* Date */}
                 <Field label="Date" hasError={!!fieldErrors?.date}>
                     <input
                         required
                         type="date"
-                        className={`border rounded px-2 py-1 w-full ${fieldErrors?.date ? "border-red-500" : ""}`}
+                        className={fieldErrors?.date ? fieldErr : fieldBase}
                         value={form.date}
                         onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))}
                     />
                     <FieldError errors={fieldErrors?.date} />
                 </Field>
 
+                {/* Début */}
                 <Field label="Début" hasError={!!fieldErrors?.start_time}>
                     <input
                         required
                         type="time"
-                        className={`border rounded px-2 py-1 w-full ${fieldErrors?.start_time ? "border-red-500" : ""}`}
+                        className={fieldErrors?.start_time ? fieldErr : fieldBase}
                         value={form.start_time}
                         onChange={(e) => setForm((f) => ({ ...f, start_time: e.target.value }))}
                     />
                     <FieldError errors={fieldErrors?.start_time} />
                 </Field>
 
+                {/* Fin */}
                 <Field label="Fin" hasError={!!fieldErrors?.end_time}>
                     <input
                         required
                         type="time"
-                        className={`border rounded px-2 py-1 w-full ${fieldErrors?.end_time ? "border-red-500" : ""}`}
+                        className={fieldErrors?.end_time ? fieldErr : fieldBase}
                         value={form.end_time}
                         onChange={(e) => setForm((f) => ({ ...f, end_time: e.target.value }))}
                     />
                     <FieldError errors={fieldErrors?.end_time} />
                 </Field>
 
+                {/* Capacité */}
                 <Field label="Capacité (optionnel)" hasError={!!fieldErrors?.capacity}>
                     <input
                         type="number"
                         min={registrationsCount ?? 0}
-                        className={`border rounded px-2 py-1 w-full ${fieldErrors?.capacity ? "border-red-500" : ""}`}
+                        className={fieldErrors?.capacity ? fieldErr : fieldBase}
                         value={form.capacity}
                         onChange={(e) => setForm((f) => ({ ...f, capacity: e.target.value }))}
                     />
@@ -662,9 +632,10 @@ export default function EventForm({ mode }) {
                     )}
                 </Field>
 
+                {/* Salle */}
                 <Field label="Salle (optionnel)" hasError={!!fieldErrors?.room}>
                     <select
-                        className={`border rounded px-2 py-1 w-full ${fieldErrors?.room ? "border-red-500" : ""}`}
+                        className={fieldErrors?.room ? fieldErr : fieldBase}
                         value={form.room || ""}
                         onChange={(e) => setForm((f) => ({ ...f, room: e.target.value }))}
                     >
@@ -678,7 +649,7 @@ export default function EventForm({ mode }) {
                     <FieldError errors={fieldErrors?.room} />
                 </Field>
 
-                {/* ---- RRULE INTERACTIF ---- */}
+                {/* RRULE */}
                 <div className="md:col-span-2">
                     <RRuleBuilder
                         value={form.rrule}
@@ -692,9 +663,7 @@ export default function EventForm({ mode }) {
                     <input
                         type="checkbox"
                         checked={!!form.requires_supplier_confirmation}
-                        onChange={(e) =>
-                            setForm((f) => ({ ...f, requires_supplier_confirmation: e.target.checked }))
-                        }
+                        onChange={(e) => setForm((f) => ({ ...f, requires_supplier_confirmation: e.target.checked }))}
                     />
                     Confirmation producteurs requise ?
                 </label>
@@ -703,13 +672,9 @@ export default function EventForm({ mode }) {
                     <input
                         type="number"
                         min={0}
-                        className={`border rounded px-2 py-1 w-full ${
-                            fieldErrors?.supplier_deadline_days ? "border-red-500" : ""
-                        }`}
+                        className={fieldErrors?.supplier_deadline_days ? fieldErr : fieldBase}
                         value={form.supplier_deadline_days}
-                        onChange={(e) =>
-                            setForm((f) => ({ ...f, supplier_deadline_days: Number(e.target.value || 0) }))
-                        }
+                        onChange={(e) => setForm((f) => ({ ...f, supplier_deadline_days: Number(e.target.value || 0) }))}
                         disabled={!form.requires_supplier_confirmation}
                     />
                     <FieldError errors={fieldErrors?.supplier_deadline_days} />
@@ -738,14 +703,14 @@ export default function EventForm({ mode }) {
                 <Field label="Description" full hasError={!!fieldErrors?.description}>
           <textarea
               rows={4}
-              className={`border rounded px-2 py-1 w-full ${fieldErrors?.description ? "border-red-500" : ""}`}
+              className={fieldErrors?.description ? fieldErr : fieldBase}
               value={form.description}
               onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
           />
                     <FieldError errors={fieldErrors?.description} />
                 </Field>
 
-                {/* Hints et avertissements */}
+                {/* Hints */}
                 {openingHint && (
                     <div className="md:col-span-2 text-xs px-3 py-2 rounded bg-slate-100 text-slate-700">
                         {openingHint.text}
