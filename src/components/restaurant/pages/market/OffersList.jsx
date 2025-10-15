@@ -1,6 +1,14 @@
+// (chemin selon ton arborescence)
+// src/components/restaurant/pages/market/OffersList.jsx
+// ou celui que tu utilises déjà pour ce composant
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { apiListOffers, apiCompareOffers } from "../../api";
+
+/* ---------- Styles champs ---------- */
+const fieldBase =
+    "border rounded px-2 py-1 w-full bg-gray-50 text-gray-900 placeholder-gray-400 " +
+    "focus:bg-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200";
 
 function Loading(){return <div className="p-4 text-sm opacity-70">Chargement…</div>;}
 function Empty({children}){return <div className="p-3 opacity-60">{children}</div>;}
@@ -112,21 +120,31 @@ export default function OffersList(){
             <div className="bg-white text-black border rounded-2xl p-4 grid md:grid-cols-6 gap-3">
                 <label className="text-sm md:col-span-2">
                     <div className="opacity-70 mb-1">Recherche</div>
-                    <input className="border rounded px-2 py-1 w-full"
-                           placeholder="produit, producteur…"
-                           value={q} onChange={(e)=> setQ(e.target.value)} />
+                    <input
+                        className={fieldBase}
+                        placeholder="produit, producteur…"
+                        value={q}
+                        onChange={(e)=> setQ(e.target.value)}
+                    />
                 </label>
 
                 <label className="text-sm">
                     <div className="opacity-70 mb-1">Disponible le</div>
-                    <input type="date" className="border rounded px-2 py-1 w-full"
-                           value={availableOn} onChange={(e)=> setAvailableOn(e.target.value)} />
+                    <input
+                        type="date"
+                        className={fieldBase}
+                        value={availableOn}
+                        onChange={(e)=> setAvailableOn(e.target.value)}
+                    />
                 </label>
 
                 <label className="text-sm">
                     <div className="opacity-70 mb-1">Tri</div>
-                    <select className="border rounded px-2 py-1 w-full"
-                            value={sort} onChange={(e)=> setSort(e.target.value)}>
+                    <select
+                        className={fieldBase}
+                        value={sort}
+                        onChange={(e)=> setSort(e.target.value)}
+                    >
                         <option value="">Par défaut</option>
                         <option value="price">Prix croissant</option>
                         <option value="-price">Prix décroissant</option>
@@ -135,8 +153,10 @@ export default function OffersList(){
 
                 <div className="flex items-end gap-2">
                     <button className="px-3 py-2 rounded border" onClick={load}>Filtrer</button>
-                    <button className="px-3 py-2 rounded border"
-                            onClick={()=>{ setQ(""); setAvailableOn(""); setAllergen(""); setExcludeAllergens(""); setSort(""); }}>
+                    <button
+                        className="px-3 py-2 rounded border"
+                        onClick={()=>{ setQ(""); setAvailableOn(""); setAllergen(""); setExcludeAllergens(""); setSort(""); }}
+                    >
                         Réinitialiser
                     </button>
                 </div>
@@ -148,11 +168,10 @@ export default function OffersList(){
             {compareSel.length>0 && (
                 <div className="bg-white text-black border rounded-2xl p-3 flex items-center justify-between">
                     <div className="text-sm">
-                        {compareSel.length} sélection(s) pour comparaison (max 4).
+                        {compareSel.length} sélection(s)  (max 4).
                     </div>
                     <div className="flex gap-2">
-                        <button className="px-3 py-2 rounded bg-blue-600 hover:bg-blue-500"
-                                onClick={doCompare}>Comparer</button>
+                        <button className="px-3 py-2 rounded bg-blue-600 hover:bg-blue-500" onClick={doCompare}>Sélectionner</button>
                         <button className="px-3 py-2 rounded border" onClick={clearCompare}>Vider</button>
                     </div>
                 </div>
@@ -160,7 +179,7 @@ export default function OffersList(){
 
             {compareData && (
                 <div className="bg-white text-black border rounded-2xl p-4 overflow-auto">
-                    <div className="font-medium mb-2">Comparaison</div>
+                    <div className="font-medium mb-2">Sélection</div>
                     {compareData.length ? (
                         <table className="w-full text-sm min-w-[800px]">
                             <thead className="bg-gray-100">
@@ -192,7 +211,7 @@ export default function OffersList(){
                             ))}
                             </tbody>
                         </table>
-                    ) : <Empty>Aucune donnée à comparer.</Empty>}
+                    ) : <Empty>Aucune donnée à Sélectionner.</Empty>}
                 </div>
             )}
 
@@ -206,7 +225,7 @@ export default function OffersList(){
                                     <div className="font-medium">{o.product_name}</div>
                                     <label className="text-xs inline-flex items-center gap-2">
                                         <input type="checkbox" checked={compareSel.includes(o.id)} onChange={()=> toggleCompare(o.id)} />
-                                        Comparer
+                                        Sélectionner
                                     </label>
                                 </div>
 
@@ -214,12 +233,10 @@ export default function OffersList(){
                                     #{o.id} • {o.region} • {o.unit}
                                 </div>
 
-                                {/* ↘️ Affiche la fenêtre de disponibilité si dispo */}
                                 {(o.available_from || o.available_to) && (
                                     <div className="text-xs opacity-70 mb-2">
                                         Dispo&nbsp;
-                                        {o.available_from ? `du ${o.available_from}` : "dès maintenant"}
-                                        {" "}
+                                        {o.available_from ? `du ${o.available_from}` : "dès maintenant"}{" "}
                                         {o.available_to ? `au ${o.available_to}` : ""}
                                     </div>
                                 )}

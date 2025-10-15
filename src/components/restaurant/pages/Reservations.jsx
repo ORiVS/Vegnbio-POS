@@ -11,6 +11,11 @@ import {
     apiSearchClients,
 } from "../api";
 
+/* ---------- Styles champs ---------- */
+const fieldBase =
+    "border rounded px-2 py-1 w-full bg-gray-50 text-gray-900 placeholder-gray-400 " +
+    "focus:bg-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200";
+
 /* ---------- UI utilitaires ---------- */
 function Loading() {
     return <div className="p-4 text-sm opacity-70">Chargement…</div>;
@@ -87,8 +92,6 @@ const STATUSES = ["PENDING", "CONFIRMED", "CANCELLED"];
 
 /* ============================================================
    PAGE : Réservations (RESTO)
-   - Création -> (PENDING) -> Affectation (assign) salle / full
-   - Filtre statut, erreurs DRF, même style visuel
    ============================================================ */
 export default function Reservations() {
     const restaurantId = useActiveRestaurantId();
@@ -129,7 +132,7 @@ export default function Reservations() {
         date: "",
         start_time: "",
         end_time: "",
-        party_size: 1, // NEW
+        party_size: 1,
     });
 
     // Affectation (dialog)
@@ -213,11 +216,11 @@ export default function Reservations() {
             // 1) créer la réservation PENDING (sans room ni full_restaurant)
             const payload = {
                 customer_email: String(clientEmail).trim(),
-                restaurant: Number(restaurantId),              // TOUJOURS requis
-                date: normalizeDate(form.date),                // "YYYY-MM-DD"
-                start_time: form.start_time,                   // "HH:MM"
-                end_time: form.end_time,                       // "HH:MM"
-                party_size: party,                             // NEW
+                restaurant: Number(restaurantId),
+                date: normalizeDate(form.date),
+                start_time: form.start_time,
+                end_time: form.end_time,
+                party_size: party,
             };
 
             const created = await apiCreateReservationAsRestaurateur(payload);
@@ -228,7 +231,7 @@ export default function Reservations() {
             setAssignErr(null);
             setAssignOpen(true);
 
-            // reset minimal du form (on garde l’email pour enchaîner si besoin)
+            // reset minimal du form (on garde l’email)
             setForm({ date: "", start_time: "", end_time: "", party_size: 1 });
         } catch (e) {
             setErr(e);
@@ -243,10 +246,7 @@ export default function Reservations() {
             const wantFull = !!assignPayload.full_restaurant;
 
             // payload selon choix
-            const payload = wantFull
-                ? { full_restaurant: true }
-                : { room: Number(assignPayload.room) || 0 };
-
+            const payload = wantFull ? { full_restaurant: true } : { room: Number(assignPayload.room) || 0 };
             if (!wantFull && !payload.room) throw new Error("Sélectionne une salle.");
 
             setAssignBusy(true);
@@ -305,11 +305,7 @@ export default function Reservations() {
             {/* Filtres */}
             <div className="flex items-center gap-3">
                 <label className="text-sm">Filtrer statut :</label>
-                <select
-                    className="border rounded px-2 py-1 bg-white text-black"
-                    value={status}
-                    onChange={(e) => setStatus(e.target.value)}
-                >
+                <select className={fieldBase + " max-w-[220px]"} value={status} onChange={(e) => setStatus(e.target.value)}>
                     <option value="">Tous</option>
                     {STATUSES.map((s) => (
                         <option key={s} value={s}>
@@ -330,7 +326,7 @@ export default function Reservations() {
                         <Field label="Client (email)">
                             <input
                                 list="client-emails"
-                                className="border rounded px-2 py-1 w-full"
+                                className={fieldBase}
                                 value={clientEmail}
                                 onChange={(e) => setClientEmail(e.target.value)}
                                 placeholder="ex. client@mail.com"
@@ -340,9 +336,7 @@ export default function Reservations() {
                             <datalist id="client-emails">
                                 {clientSuggestions.map((u) => (
                                     <option key={u.id} value={u.email}>
-                                        {(u.first_name || u.last_name)
-                                            ? `${u.first_name || ""} ${u.last_name || ""}`.trim()
-                                            : u.email}
+                                        {(u.first_name || u.last_name) ? `${u.first_name || ""} ${u.last_name || ""}`.trim() : u.email}
                                     </option>
                                 ))}
                             </datalist>
@@ -352,7 +346,7 @@ export default function Reservations() {
                             <input
                                 required
                                 type="date"
-                                className="border rounded px-2 py-1 w-full"
+                                className={fieldBase}
                                 value={form.date}
                                 onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))}
                             />
@@ -362,7 +356,7 @@ export default function Reservations() {
                             <input
                                 required
                                 type="time"
-                                className="border rounded px-2 py-1 w-full"
+                                className={fieldBase}
                                 value={form.start_time}
                                 onChange={(e) => setForm((f) => ({ ...f, start_time: e.target.value }))}
                             />
@@ -372,7 +366,7 @@ export default function Reservations() {
                             <input
                                 required
                                 type="time"
-                                className="border rounded px-2 py-1 w-full"
+                                className={fieldBase}
                                 value={form.end_time}
                                 onChange={(e) => setForm((f) => ({ ...f, end_time: e.target.value }))}
                             />
@@ -382,7 +376,7 @@ export default function Reservations() {
                             <input
                                 min={1}
                                 type="number"
-                                className="border rounded px-2 py-1 w-full"
+                                className={fieldBase}
                                 value={form.party_size}
                                 onChange={(e) => setForm((f) => ({ ...f, party_size: e.target.value }))}
                                 required
@@ -405,7 +399,7 @@ export default function Reservations() {
                     </div>
 
                     <div className="text-xs opacity-70">
-                        Astuce : après la création, une fenêtre s’ouvrira pour **affecter** la réservation à une salle ou au
+                        Astuce : après la création, une fenêtre s’ouvrira pour <b>affecter</b> la réservation à une salle ou au
                         restaurant entier (contrôles de conflits côté API).
                     </div>
                 </form>
@@ -442,7 +436,6 @@ export default function Reservations() {
                                         [r.customer_first_name, r.customer_last_name].filter(Boolean).join(" ") ||
                                         (r.customer_id_read ? `#${r.customer_id_read}` : "N/A")}
                                 </td>
-                                {/* full_restaurant → nom resto ; sinon nom salle */}
                                 <td>{r.full_restaurant ? (r.restaurant_name || "—") : (r.room_name || "—")}</td>
                                 <td>{r.date}</td>
                                 <td>{(r.start_time || "").slice(0, 5)}–{(r.end_time || "").slice(0, 5)}</td>
@@ -450,19 +443,17 @@ export default function Reservations() {
                                 <td>{r.status}</td>
                                 <td className="space-x-2">
                                     {r.status === "PENDING" && (
-                                        <>
-                                            <button
-                                                className="px-2 py-1 rounded bg-slate-700 text-white"
-                                                onClick={() => {
-                                                    setAssignTargetId(r.id);
-                                                    setAssignPayload({ full_restaurant: !!r.full_restaurant, room: "" });
-                                                    setAssignErr(null);
-                                                    setAssignOpen(true);
-                                                }}
-                                            >
-                                                Affecter
-                                            </button>
-                                        </>
+                                        <button
+                                            className="px-2 py-1 rounded bg-slate-700 text-white"
+                                            onClick={() => {
+                                                setAssignTargetId(r.id);
+                                                setAssignPayload({ full_restaurant: !!r.full_restaurant, room: "" });
+                                                setAssignErr(null);
+                                                setAssignOpen(true);
+                                            }}
+                                        >
+                                            Affecter
+                                        </button>
                                     )}
                                     {r.status !== "CONFIRMED" && (
                                         <button
@@ -528,7 +519,7 @@ export default function Reservations() {
                             {!assignPayload.full_restaurant && (
                                 <Field label="Salle">
                                     <select
-                                        className="border rounded px-2 py-1 w-full"
+                                        className={fieldBase}
                                         value={assignPayload.room}
                                         onChange={(e) => setAssignPayload((p) => ({ ...p, room: e.target.value }))}
                                     >
