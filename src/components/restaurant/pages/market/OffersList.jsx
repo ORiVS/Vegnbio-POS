@@ -1,6 +1,4 @@
-// (chemin selon ton arborescence)
 // src/components/restaurant/pages/market/OffersList.jsx
-// ou celui que tu utilises déjà pour ce composant
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { apiListOffers, apiCompareOffers } from "../../api";
@@ -13,6 +11,7 @@ const fieldBase =
 function Loading(){return <div className="p-4 text-sm opacity-70">Chargement…</div>;}
 function Empty({children}){return <div className="p-3 opacity-60">{children}</div>;}
 
+/* ---------- Helpers erreurs ---------- */
 function extractApiErrors(error){
     const out = [];
     if(!error) return out;
@@ -200,11 +199,12 @@ export default function OffersList(){
                                     <td className="py-2 px-3">
                                         <Link className="underline" to={`/restaurant/market/offers/${o.id}`}>{o.product_name}</Link>
                                     </td>
+                                    {/* ⬇️ Affiche le nom du producteur depuis l’API */}
                                     <td>{o.producer_name || "—"}</td>
                                     <td>{o.region}</td>
                                     <td>{o.unit}</td>
                                     <td>{Number(o.price).toFixed(2)} €</td>
-                                    <td>{o.min_order_qty}</td>
+                                    <td>{o.min_order_qty ?? "—"}</td>
                                     <td>{o.stock_qty}</td>
                                     <td>{o.avg_rating ?? "—"}</td>
                                 </tr>
@@ -224,7 +224,11 @@ export default function OffersList(){
                                 <div className="flex items-center justify-between">
                                     <div className="font-medium">{o.product_name}</div>
                                     <label className="text-xs inline-flex items-center gap-2">
-                                        <input type="checkbox" checked={compareSel.includes(o.id)} onChange={()=> toggleCompare(o.id)} />
+                                        <input
+                                            type="checkbox"
+                                            checked={compareSel.includes(o.id)}
+                                            onChange={()=> toggleCompare(o.id)}
+                                        />
                                         Sélectionner
                                     </label>
                                 </div>
@@ -232,6 +236,11 @@ export default function OffersList(){
                                 <div className="text-xs opacity-70 mb-2">
                                     #{o.id} • {o.region} • {o.unit}
                                 </div>
+
+                                {/* Optionnel : affiche aussi le producteur sur la carte */}
+                                {o.producer_name && (
+                                    <div className="text-xs opacity-80 mb-1">Producteur : <b>{o.producer_name}</b></div>
+                                )}
 
                                 {(o.available_from || o.available_to) && (
                                     <div className="text-xs opacity-70 mb-2">
@@ -243,7 +252,7 @@ export default function OffersList(){
 
                                 <div className="text-sm mb-2 line-clamp-2">{o.description || "—"}</div>
                                 <div className="text-sm">Prix: <b>{Number(o.price).toFixed(2)} €</b></div>
-                                <div className="text-sm">Min.: <b>{o.min_order_qty}</b> • Stock: <b>{o.stock_qty}</b></div>
+                                <div className="text-sm">Min.: <b>{o.min_order_qty ?? "—"}</b> • Stock: <b>{o.stock_qty}</b></div>
                                 <div className="text-sm">Note: <b>{o.avg_rating ?? "—"}</b></div>
                                 <div className="mt-3 flex gap-2">
                                     <Link className="px-3 py-2 rounded border" to={`/restaurant/market/offers/${o.id}`}>Détail</Link>
