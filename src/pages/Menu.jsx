@@ -39,7 +39,8 @@ if (DEBUG && typeof window !== "undefined") {
 const unwrap = (res) => (res && typeof res === "object" && "data" in res ? res.data : res);
 
 // Date du jour (YYYY-MM-DD)
-const TODAY = new Date().toLocaleDateString("sv-SE");
+// Date du jour (YYYY-MM-DD) en ISO, indépendant de la locale
+const TODAY = new Date().toISOString().slice(0, 10);
 
 // Regroupe items de menu par course_type
 const groupByCourse = (items = []) =>
@@ -163,6 +164,8 @@ export default function Menu() {
           const dishList = unwrap(dishListRes);
           const menuList = unwrap(menuListRes);
           const availList = unwrap(availListRes);
+          const truthyAvailable = (v) => v === true || v === 1 || v === "true";
+
 
           dlog("getDishes =>", dishList);
           dlog("getMenus =>", menuList);
@@ -172,9 +175,12 @@ export default function Menu() {
           setMenus((Array.isArray(menuList) ? menuList : []).filter((m) => m.is_published !== false));
 
           const ids = (Array.isArray(availList) ? availList : [])
-              .filter((a) => a.is_available === true)
-              .map((a) => a.dish);
+              .filter((a) => truthyAvailable(a.is_available))
+              .map((a) => dishIdOf(a.dish))   // ← convertit objet {id:…} → nombre
+              .filter(Boolean);
+
           setAvailSet(new Set(ids));
+
 
           setLast({ stage: "bootstrap", dishList, menuList, availList });
           if (DEBUG) window.__POS_DEBUG__.bootstrap = { dishList, menuList, availList };
@@ -287,7 +293,9 @@ export default function Menu() {
   const addFromMenuItem = async (menuItem) => {
     const id = dishIdOf(menuItem.dish);
     const dish = dishById.get(id) || (typeof menuItem.dish === "object" ? menuItem.dish : null);
-    const isAvailable = !!(id && availSet.has(id));
+    const isAvailable = availSet.size === 0
+  ? (dish?.is_active !== false)
+  : (id && availSet.has(id));
     dlog("click menuItem =>", { id, dish, isAvailable });
     if (!id || !dish || !isAvailable) return;
     await add(dish);
@@ -392,7 +400,10 @@ export default function Menu() {
                                     {items.map((it) => {
                                       const id = dishIdOf(it.dish);
                                       const dish = dishById.get(id) || (typeof it.dish === "object" ? it.dish : null);
-                                      const isAvailable = !!(id && availSet.has(id));
+                                      const isAvailable = availSet.size === 0
+                                          ? (dish?.is_active !== false)
+                                          : (id && availSet.has(id));
+
                                       const title = isAvailable && dish ? dish.name : "(Plat indisponible)";
                                       const price = isAvailable && dish?.price != null ? Number(dish.price).toFixed(2) + " €" : "—";
                                       const allergens = (dish?.allergens || []).map((a) => a.label).join(", ");
